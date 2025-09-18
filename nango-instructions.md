@@ -14,11 +14,10 @@ cp deploy/docker/.env.nango.example deploy/docker/.env && encryption_key=$(opens
 docker compose up -d
 ```
 
-**Services included:**
+**Nango Services:**
 - **Nango Server**: `http://localhost:3050` (Dashboard/API)
 - **Nango Connect UI**: `http://localhost:3051` (OAuth flows)
-- **PostgreSQL**: Database for Nango
-- **Redis**: Caching for Nango
+
 
 ### 2) Configure the framework applications to use Nango
 
