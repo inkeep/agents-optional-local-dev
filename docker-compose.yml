@@ -230,7 +230,7 @@ services:
       - LOW_CARDINAL_EXCEPTION_GROUPING=false
     ports:
       - "4317:4317" # OTLP gRPC receiver
-      - "4317:4318" # OTLP HTTP receiver
+      - "4318:4318" # OTLP HTTP receiver
     depends_on:
       signoz-server:
         condition: service_healthy
