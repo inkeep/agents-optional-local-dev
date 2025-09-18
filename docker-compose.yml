@@ -9,7 +9,7 @@ x-signoz-common: &signoz-common
 
 x-signoz-clickhouse-defaults: &signoz-clickhouse-defaults
   !!merge <<: *signoz-common
-  image: clickhouse/clickhouse-server:24.1.2-alpine
+  image: clickhouse/clickhouse-server:25.5.6
   tty: true
   labels:
     signoz.io/scrape: "true"
@@ -35,10 +35,12 @@ x-signoz-clickhouse-defaults: &signoz-clickhouse-defaults
     nofile:
       soft: 262144
       hard: 262144
+  environment:
+    - CLICKHOUSE_SKIP_USER_SETUP=1
 
 x-signoz-zookeeper-defaults: &signoz-zookeeper-defaults
   !!merge <<: *signoz-common
-  image: bitnami/zookeeper:3.7.1
+  image: signoz/zookeeper:3.7.1
   user: root
   labels:
     signoz.io/scrape: "true"
@@ -136,7 +138,7 @@ services:
   signoz-init-clickhouse:
     !!merge <<: *signoz-common
     profiles: [ "signoz" ]
-    image: clickhouse/clickhouse-server:24.1.2-alpine
+    image: clickhouse/clickhouse-server:25.5.6
     container_name: signoz-init-clickhouse
     command:
       - bash
@@ -188,7 +190,7 @@ services:
   signoz-server:
     !!merge <<: *signoz-db-depend
     profiles: [ "signoz" ]
-    image: signoz/signoz:v0.95.1
+    image: signoz/signoz:v0.95.0
     container_name: signoz-server
     command:
       - --config=/root/config/prometheus.yml
