@@ -13,7 +13,7 @@ processors:
 exporters:
   # Export to SigNoz OTEL Collector
   otlp/signoz:
-    endpoint: host.docker.internal:14317
+    endpoint: host.docker.internal:4317
     tls:
       insecure: true
   # Export to Jaeger
