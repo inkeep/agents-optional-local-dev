@@ -63,6 +63,7 @@ x-signoz-db-depend: &signoz-db-depend
 services:
   # Nango
   nango-server:
+    profiles: [ "nango" ]
     image: nangohq/nango-server:hosted-0.68.0
     container_name: nango-server
     platform: linux/amd64
@@ -96,6 +97,7 @@ services:
     restart: unless-stopped
 
   nango-db:
+    profiles: [ "nango" ]
     image: postgres:16.0-alpine
     container_name: nango-db
     environment:
@@ -109,6 +111,7 @@ services:
     restart: unless-stopped
 
   nango-redis:
+    profiles: [ "nango" ]
     image: redis:7.2.4
     container_name: nango-redis
     networks:
@@ -117,6 +120,7 @@ services:
 
   # OTEL Collector
   otel-collector:
+    profiles: [ "otel-collector" ]
     image: otel/opentelemetry-collector:0.135.0
     container_name: otel-collector
     command: [ "--config=/etc/otel-collector-config.yaml" ]
@@ -131,6 +135,7 @@ services:
   # SigNoz Infrastructure Services
   signoz-init-clickhouse:
     !!merge <<: *signoz-common
+    profiles: [ "signoz" ]
     image: clickhouse/clickhouse-server:24.1.2-alpine
     container_name: signoz-init-clickhouse
     command:
@@ -153,6 +158,7 @@ services:
 
   signoz-zookeeper:
     !!merge <<: *signoz-zookeeper-defaults
+    profiles: [ "signoz" ]
     container_name: signoz-zookeeper
     volumes:
       - signoz-zookeeper-db:/bitnami/zookeeper
@@ -167,6 +173,7 @@ services:
 
   signoz-clickhouse:
     !!merge <<: *signoz-clickhouse-defaults
+    profiles: [ "signoz" ]
     container_name: signoz-clickhouse
     volumes:
       - ./signoz/clickhouse/user_scripts:/var/lib/clickhouse/user_scripts/
@@ -180,6 +187,7 @@ services:
 
   signoz-server:
     !!merge <<: *signoz-db-depend
+    profiles: [ "signoz" ]
     image: signoz/signoz:v0.95.1
     container_name: signoz-server
     command:
@@ -215,6 +223,7 @@ services:
 
   signoz-otel-collector:
     !!merge <<: *signoz-db-depend
+    profiles: [ "signoz" ]
     image: signoz/signoz-otel-collector:v0.129.5
     container_name: signoz-otel-collector
     command:
@@ -239,6 +248,7 @@ services:
 
   signoz-schema-migrator-sync:
     !!merge <<: *signoz-common
+    profiles: [ "signoz" ]
     image: signoz/signoz-schema-migrator:v0.129.5
     container_name: signoz-schema-migrator-sync
     command:
@@ -254,6 +264,7 @@ services:
 
   signoz-schema-migrator-async:
     !!merge <<: *signoz-db-depend
+    profiles: [ "signoz" ]
     image: signoz/signoz-schema-migrator:v0.129.5
     container_name: signoz-schema-migrator-async
     command:
@@ -266,6 +277,7 @@ services:
 
   # Jaeger
   jaeger:
+    profiles: [ "jaeger" ]
     image: jaegertracing/all-in-one:1.73.0
     container_name: jaeger
     ports:
