@@ -166,7 +166,7 @@ services:
     profiles: [ "signoz" ]
     container_name: signoz-zookeeper
     volumes:
-      - signoz-zookeeper-db:/signoz/zookeeper
+      - signoz-zookeeper-db:/bitnami/zookeeper
     environment:
       - ZOO_SERVER_ID=1
       - ALLOW_ANONYMOUS_LOGIN=yes
