@@ -123,8 +123,8 @@ services:
     volumes:
       - ./otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4317:4317" # OTLP gRPC receiver (routes to both systems)
-      - "4318:4318" # OTLP HTTP receiver (routes to both systems)
+      - "14317:4317" # OTLP gRPC receiver (routes to both systems)
+      - "14318:4318" # OTLP HTTP receiver (routes to both systems)
     networks:
       - otel-collector-net
 
@@ -229,8 +229,8 @@ services:
       - OTEL_RESOURCE_ATTRIBUTES=host.name=signoz-host,os.type=linux
       - LOW_CARDINAL_EXCEPTION_GROUPING=false
     ports:
-      - "14317:4317" # OTLP gRPC receiver
-      - "14318:4318" # OTLP HTTP receiver
+      - "4317:4317" # OTLP gRPC receiver
+      - "4317:4318" # OTLP HTTP receiver
     depends_on:
       signoz-server:
         condition: service_healthy
