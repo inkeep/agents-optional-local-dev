@@ -120,21 +120,7 @@ services:
       - nango-net
     restart: unless-stopped
 
-  # OTEL Collector
-  otel-collector:
-    profiles: [ "otel-collector" ]
-    image: otel/opentelemetry-collector:0.135.0
-    container_name: otel-collector
-    command: [ "--config=/etc/otel-collector-config.yaml" ]
-    volumes:
-      - ./otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
-    ports:
-      - "14317:4317" # OTLP gRPC receiver (routes to both systems)
-      - "14318:4318" # OTLP HTTP receiver (routes to both systems)
-    networks:
-      - otel-collector-net
-
-  # SigNoz Infrastructure Services
+  # SigNoz
   signoz-init-clickhouse:
     !!merge <<: *signoz-common
     profiles: [ "signoz" ]
@@ -276,6 +262,20 @@ services:
     networks:
       - signoz-net
     restart: on-failure
+
+  # OTEL Collector
+  otel-collector:
+    profiles: [ "otel-collector" ]
+    image: otel/opentelemetry-collector:0.135.0
+    container_name: otel-collector
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
+    volumes:
+      - ./otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "14317:4317" # OTLP gRPC receiver (routes to both systems)
+      - "14318:4318" # OTLP HTTP receiver (routes to both systems)
+    networks:
+      - otel-collector-net
 
   # Jaeger
   jaeger:
