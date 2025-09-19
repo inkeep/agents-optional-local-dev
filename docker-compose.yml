@@ -135,8 +135,6 @@ services:
       - "14318:4318" # OTLP HTTP receiver (routes to both systems)
     networks:
       - otel-collector-net
-      - signoz-net
-      - jaeger-net
 
   # SigNoz Infrastructure Services
   signoz-init-clickhouse:
