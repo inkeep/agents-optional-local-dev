@@ -78,19 +78,21 @@ services:
       - NANGO_DB_HOST=${NANGO_DB_HOST:-nango-db}
       - NANGO_DB_NAME=${NANGO_DB_NAME:-nango}
       - RECORDS_DATABASE_URL=postgresql://${NANGO_DB_USER:-nango}:${NANGO_DB_PASSWORD:-nango}@${NANGO_DB_HOST:-nango-db}:5432/${NANGO_DB_NAME:-nango}
-      - NANGO_SERVER_URL=${NANGO_SERVER_URL:-http://localhost:3003}
-      - NANGO_PUBLIC_SERVER_URL=${NANGO_PUBLIC_SERVER_URL:-http://localhost:3003}
-      - SERVER_PORT=${NANGO_SERVER_PORT:-3003}
+      - NANGO_SERVER_URL=${NANGO_SERVER_URL:-http://localhost:3050}
+      - NANGO_PUBLIC_SERVER_URL=${NANGO_PUBLIC_SERVER_URL:-http://localhost:3050}
+      - NANGO_PUBLIC_CONNECT_URL=${NANGO_PUBLIC_CONNECT_URL:-http://localhost:3051}
+      - SERVER_PORT=${NANGO_SERVER_PORT:-3050}
+      - NANGO_CONNECT_UI_PORT=${NANGO_CONNECT_UI_PORT:-3051}
       - FLAG_SERVE_CONNECT_UI=${NANGO_FLAG_SERVE_CONNECT_UI:-true}
-      - NANGO_CONNECT_UI_PORT=${NANGO_CONNECT_UI_PORT:-3009}
       - FLAG_AUTH_ENABLED=${NANGO_FLAG_AUTH_ENABLED:-false}
+      - NANGO_LOGS_ENABLED=${NANGO_LOGS_ENABLED:-false}
       - LOG_LEVEL=${NANGO_LOG_LEVEL:-info}
       - CSP_REPORT_ONLY=true
     volumes:
       - './nango/providers.yaml:/app/nango/packages/providers/providers.yaml'
     ports:
-      - '3050:${NANGO_SERVER_PORT:-3003}'
-      - '3051:${NANGO_CONNECT_UI_PORT:-3009}'
+      - '${NANGO_SERVER_PORT:-3050}:${NANGO_SERVER_PORT:-3050}'
+      - '${NANGO_CONNECT_UI_PORT:-3051}:${NANGO_CONNECT_UI_PORT:-3051}'
     networks:
       - nango-net
     depends_on:
@@ -135,7 +137,6 @@ services:
       - otel-collector-net
       - signoz-net
       - jaeger-net
-
 
   # SigNoz Infrastructure Services
   signoz-init-clickhouse:
