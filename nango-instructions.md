@@ -7,10 +7,14 @@ This guide covers how to configure the Agent Framework to work with the **integr
 Nango runs as part of the main development stack:
 
 ```bash
-# Generate encryption key and create .env file
-cp .env.example .env && encryption_key=$(openssl rand -base64 32) && sed -i '' "s|REPLACE_WITH_BASE64_256BIT_ENCRYPTION_KEY|$encryption_key|" .env && echo "Docker environment file created with auto-generated encryption key"
+cp .env.example .env && \
+  encryption_key=$(openssl rand -base64 32) && \
+  sed -i '' "s|<REPLACE_WITH_BASE64_256BIT_ENCRYPTION_KEY>|$encryption_key|" .env && \
+  echo "Docker environment file created with auto-generated encryption key"
+```
 
-# Start the full stack from deploy/docker (includes Nango, Signoz, OTEL Collector, and Jaeger)
+Start the full stack from deploy/docker (includes Nango, Signoz, OTEL Collector, and Jaeger)
+```
 docker compose up -d
 ```
 
