@@ -71,15 +71,12 @@ services:
     platform: linux/amd64
     environment:
       - NANGO_ENCRYPTION_KEY
-      - NANGO_DASHBOARD_USERNAME=
-      - NANGO_DASHBOARD_PASSWORD=
       - NANGO_DB_USER=${NANGO_DB_USER:-nango}
       - NANGO_DB_PASSWORD=${NANGO_DB_PASSWORD:-nango}
       - NANGO_DB_HOST=${NANGO_DB_HOST:-nango-db}
       - NANGO_DB_NAME=${NANGO_DB_NAME:-nango}
       - RECORDS_DATABASE_URL=postgresql://${NANGO_DB_USER:-nango}:${NANGO_DB_PASSWORD:-nango}@${NANGO_DB_HOST:-nango-db}:5432/${NANGO_DB_NAME:-nango}
       - NANGO_SERVER_URL=${NANGO_SERVER_URL:-http://localhost:3050}
-      - NANGO_PUBLIC_SERVER_URL=${NANGO_PUBLIC_SERVER_URL:-http://localhost:3050}
       - NANGO_PUBLIC_CONNECT_URL=${NANGO_PUBLIC_CONNECT_URL:-http://localhost:3051}
       - SERVER_PORT=${NANGO_SERVER_PORT:-3050}
       - NANGO_CONNECT_UI_PORT=${NANGO_CONNECT_UI_PORT:-3051}
