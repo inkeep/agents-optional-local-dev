@@ -18,8 +18,7 @@ receivers:
               job_name: otel-collector
 processors:
   batch:
-    send_batch_size: 10000
-    send_batch_max_size: 11000
+    send_batch_size: 1
     timeout: 10s
   resourcedetection:
     # Using OTEL_RESOURCE_ATTRIBUTES envvar, env detector adds custom labels.
