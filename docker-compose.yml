@@ -192,7 +192,7 @@ services:
   signoz-server:
     !!merge <<: *signoz-db-depend
     profiles: [ "signoz" ]
-    image: signoz/signoz:v0.95.0
+    image: signoz/signoz:v0.96.1
     container_name: signoz-server
     command:
       - --config=/root/config/prometheus.yml
@@ -228,7 +228,7 @@ services:
   signoz-otel-collector:
     !!merge <<: *signoz-db-depend
     profiles: [ "signoz" ]
-    image: signoz/signoz-otel-collector:v0.129.5
+    image: signoz/signoz-otel-collector:v0.129.6
     container_name: signoz-otel-collector
     command:
       - --config=/etc/otel-collector-config.yaml
@@ -253,7 +253,7 @@ services:
   signoz-schema-migrator-sync:
     !!merge <<: *signoz-common
     profiles: [ "signoz" ]
-    image: signoz/signoz-schema-migrator:v0.129.5
+    image: signoz/signoz-schema-migrator:v0.129.6
     container_name: signoz-schema-migrator-sync
     command:
       - sync
@@ -269,7 +269,7 @@ services:
   signoz-schema-migrator-async:
     !!merge <<: *signoz-db-depend
     profiles: [ "signoz" ]
-    image: signoz/signoz-schema-migrator:v0.129.5
+    image: signoz/signoz-schema-migrator:v0.129.6
     container_name: signoz-schema-migrator-async
     command:
       - async
