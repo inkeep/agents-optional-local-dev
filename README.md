@@ -29,3 +29,34 @@ An optional misc tool to view traces from the Inkeep Agents Framework.
 - **Jaeger UI**: `localhost:16686`
 - **OTLP gRPC**: `localhost:24317`
 - **OTLP HTTP**: `localhost:24318`
+
+## Steps
+
+### 1. Clone this repository
+
+### 2. Configure environment variables
+
+```bash
+cp .env.example .env && \
+  encryption_key=$(openssl rand -base64 32) && \
+  sed -i '' "s|<REPLACE_WITH_BASE64_256BIT_ENCRYPTION_KEY>|$encryption_key|" .env && \
+  echo "Docker environment file created with auto-generated encryption key"
+```
+
+### 3. Start
+Start the full stack from deploy/docker (includes Nango, Signoz, OTEL Collector, and Jaeger)
+```
+docker compose up -d
+```
+
+### 4. Retreive `NANGO_SECRET_KEY`
+
+- Open Nango at `http://localhost:3050`
+- Navigate to Environment Settings and copy the Secret Key
+
+### 5. Create `SIGNOZ_API_KEY`
+
+- Open SigNoz at `http://localhost:3080`
+- Create an account on first login if needed
+- Navigate to Settings → Account Settings → API Keys → New Key
+- Create a new API key with at least the Viewer role
