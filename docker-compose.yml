@@ -282,26 +282,6 @@ services:
       - signoz-net
     restart: on-failure
 
-  signoz-init-admin:
-    profiles: [ "signoz" ]
-    image: curlimages/curl:latest
-    container_name: signoz-init-admin
-    depends_on:
-      signoz-server:
-        condition: service_healthy
-    environment:
-      - SIGNOZ_ADMIN_EMAIL=${SIGNOZ_ADMIN_EMAIL:-}
-      - SIGNOZ_ADMIN_PASSWORD=${SIGNOZ_ADMIN_PASSWORD:-}
-    command: >
-      sh -c 'if [ -z "$$SIGNOZ_ADMIN_EMAIL" ] || [ -z "$$SIGNOZ_ADMIN_PASSWORD" ]; then
-            echo "SIGNOZ_ADMIN_EMAIL and/or SIGNOZ_ADMIN_PASSWORD not set, skipping admin account creation"
-            exit 0
-          fi
-          curl -sS -X POST http://signoz-server:8080/api/v1/register -H "Content-Type: application/json" -d "{\"email\":\"$$SIGNOZ_ADMIN_EMAIL\",\"password\":\"$$SIGNOZ_ADMIN_PASSWORD\"}"'
-    networks:
-      - signoz-net
-    restart: "no"
-
   # Jaeger
   jaeger:
     profiles: [ "jaeger" ]
