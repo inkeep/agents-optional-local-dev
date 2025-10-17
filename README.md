@@ -60,3 +60,12 @@ docker compose up -d
 - Create an account on first login if needed
 - Navigate to Settings → Account Settings → API Keys → New Key
 - Create a new API key with at least the Viewer role
+
+### Updating
+
+```
+docker-compose stop
+docker-compose rm -f
+docker-compose pull
+docker-compose up -d
+```
