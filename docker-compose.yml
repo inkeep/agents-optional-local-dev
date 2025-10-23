@@ -66,7 +66,7 @@ services:
   # Nango
   nango-server:
     profiles: [ "nango" ]
-    image: nangohq/nango-server:hosted-0.69.4
+    image: nangohq/nango-server:hosted-0.69.5
     container_name: nango-server
     platform: linux/amd64
     environment:
