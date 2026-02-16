@@ -12,7 +12,7 @@ If you're working with the [Inkeep Agents](https://github.com/inkeep/agents) mon
 pnpm setup-dev:optional
 ```
 
-This clones this repo, starts all services, generates credentials, and wires env vars to your `.env` automatically. See the [main repo docs](https://github.com/inkeep/agents) for details.
+This clones this repo, starts all services, generates credentials, and wires env vars to your `.env` automatically. The monorepo ships a thin bootstrap shim that delegates to [`scripts/setup.sh`](scripts/setup.sh) in this repo. See the [main repo docs](https://github.com/inkeep/agents) for details.
 
 Lifecycle commands:
 - `pnpm optional:stop` — stop optional services
@@ -20,6 +20,18 @@ Lifecycle commands:
 - `pnpm optional:reset` — nuke data and re-setup from scratch
 
 If you used the automated setup, you can skip the manual steps below.
+
+### Direct invocation
+
+If you cloned this repo manually and want to use the setup script directly:
+
+```bash
+CALLER_ENV_FILE=/path/to/your/project/.env ./scripts/setup.sh
+./scripts/setup.sh --stop
+./scripts/setup.sh --status
+```
+
+`CALLER_ENV_FILE` tells the script where to write service URLs and API keys. It is required for `setup` and `--reset`, but optional for `--stop` and `--status`.
 
 ---
 
