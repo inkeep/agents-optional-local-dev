@@ -73,6 +73,7 @@ services:
       - NODE_ENV
       - SERVER_RUN_MODE=DOCKERIZED
       - NANGO_ENCRYPTION_KEY
+      - NANGO_SECRET_KEY_DEV
       - NANGO_DB_USER=${NANGO_DB_USER:-nango}
       - NANGO_DB_PASSWORD=${NANGO_DB_PASSWORD:-nango}
       - NANGO_DB_HOST=${NANGO_DB_HOST:-nango-db}
