@@ -73,13 +73,18 @@ Use these steps if you're running this repo standalone (without `pnpm setup-dev:
 
 ```bash
 cp .env.docker.example .env && \
-  encryption_key=$(openssl rand -base64 32) && \
-  sed -i '' "s|<REPLACE_WITH_NANGO_ENCRYPTION_KEY>|$encryption_key|" .env && \
-  echo "Docker environment file created with auto-generated encryption key"
+  nango_encryption_key=$(openssl rand -base64 32) && \
+  nango_dashboard_password=$(openssl rand -base64 8) && \
+  tmp_file=$(mktemp) && \
+  sed \
+    -e "s|<REPLACE_WITH_NANGO_ENCRYPTION_KEY>|$nango_encryption_key|" \
+    -e "s|<REPLACE_WITH_NANGO_DASHBOARD_PASSWORD>|$nango_dashboard_password|" \
+    .env > "$tmp_file" && \
+  mv "$tmp_file" .env && \
+  echo "Docker environment file created with auto-generated NANGO_ENCRYPTION_KEY and NANGO_DASHBOARD_PASSWORD"
 ```
 
 Optionally, generate a Nango API secret key (so you don't need to retrieve it from the dashboard later):
-
 ```bash
 nango_key=$(openssl rand -hex 16) && \
   echo "NANGO_SECRET_KEY_DEV=$nango_key" >> .env && \
