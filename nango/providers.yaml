@@ -1,3 +1,9 @@
+# Nango Provider Definitions
+#
+# Source: https://github.com/NangoHQ/nango (packages/providers/providers.yaml)
+# License: Elastic License 2.0 (ELv2) — Copyright 2024 Nango
+# See NOTICE in the repository root for full license details.
+#
 # yaml-language-server: $schema=./../../scripts/validation/providers/schema.json
 1password-scim:
     display_name: 1Password (SCIM)
