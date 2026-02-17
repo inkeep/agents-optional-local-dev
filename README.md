@@ -12,12 +12,12 @@ If you're working with the [Inkeep Agents](https://github.com/inkeep/agents) mon
 pnpm setup-dev:optional
 ```
 
-This clones this repo, starts all services, generates credentials, and wires env vars to your `.env` automatically. The monorepo ships a thin bootstrap shim that delegates to [`scripts/setup.sh`](scripts/setup.sh) in this repo. See the [main repo docs](https://github.com/inkeep/agents) for details.
+This clones this repo into `.optional-services/` in your project, starts all services, generates credentials, and writes env vars to your `.env`. See the [main repo docs](https://github.com/inkeep/agents) for details.
 
 Lifecycle commands:
 - `pnpm optional:stop` — stop optional services
 - `pnpm optional:status` — show service status
-- `pnpm optional:reset` — nuke data and re-setup from scratch
+- `pnpm optional:reset` — remove all data and re-run setup
 
 If you used the automated setup, you can skip the manual steps below.
 
@@ -31,7 +31,7 @@ CALLER_ENV_FILE=/path/to/your/project/.env ./scripts/setup.sh
 ./scripts/setup.sh --status
 ```
 
-`CALLER_ENV_FILE` tells the script where to write service URLs and API keys. It is required for `setup` and `--reset`, but optional for `--stop` and `--status`.
+`CALLER_ENV_FILE` tells the script where to write service URLs and API keys. Required for `setup` and `--reset`; optional for `--stop` and `--status`.
 
 ---
 
@@ -69,6 +69,8 @@ Use these steps if you're running this repo standalone (without `pnpm setup-dev:
 
 ### 1. Clone this repository
 
+Clone as `.optional-services/` (matching the automated setup default) or any directory you prefer.
+
 ### 2. Configure environment variables
 
 ```bash
@@ -81,12 +83,14 @@ cp .env.docker.example .env && \
     -e "s|<REPLACE_WITH_NANGO_DASHBOARD_PASSWORD>|$nango_dashboard_password|" \
     .env > "$tmp_file" && \
   mv "$tmp_file" .env && \
-  echo "Docker environment file created with auto-generated NANGO_ENCRYPTION_KEY and NANGO_DASHBOARD_PASSWORD"
+  echo ".env created with auto-generated NANGO_ENCRYPTION_KEY and NANGO_DASHBOARD_PASSWORD"
 ```
 
-Optionally, generate a Nango API secret key (so you don't need to retrieve it from the dashboard later):
+Optionally, pre-generate a Nango secret key (avoids retrieving it from the dashboard later):
+
 ```bash
-nango_key=$(openssl rand -hex 16) && \
+_hex=$(openssl rand -hex 16) && \
+  nango_key=$(echo "$_hex" | sed 's/^\(.\{8\}\)\(.\{4\}\).\(.\{3\}\).\(.\{3\}\)\(.\{12\}\)$/\1-\2-4\3-a\4-\5/') && \
   echo "NANGO_SECRET_KEY_DEV=$nango_key" >> .env && \
   echo "Nango secret key: $nango_key (add this as NANGO_SECRET_KEY in your agents .env)"
 ```
