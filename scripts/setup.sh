@@ -189,7 +189,9 @@ cmd_setup() {
     set_env_var "$COMPANION_ENV" "NANGO_SECRET_KEY_DEV" "$EXISTING_NANGO_KEY"
     echo -e "  ${GREEN}✓${NC} Re-using existing NANGO_SECRET_KEY"
   else
-    NANGO_KEY="$(openssl rand -hex 16)"
+    # Nango validates keys as UUID v4. Generate one portably (openssl + sed).
+    _hex="$(openssl rand -hex 16)"
+    NANGO_KEY="$(echo "$_hex" | sed 's/^\(.\{8\}\)\(.\{4\}\).\(.\{3\}\).\(.\{3\}\)\(.\{12\}\)$/\1-\2-4\3-a\4-\5/')"
     set_env_var "$COMPANION_ENV" "NANGO_SECRET_KEY_DEV" "$NANGO_KEY"
     set_env_var "$ENV_FILE" "NANGO_SECRET_KEY" "$NANGO_KEY"
     echo -e "  ${GREEN}✓${NC} Generated NANGO_SECRET_KEY"

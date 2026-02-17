@@ -89,7 +89,8 @@ cp .env.docker.example .env && \
 Optionally, pre-generate a Nango secret key (avoids retrieving it from the dashboard later):
 
 ```bash
-nango_key=$(openssl rand -hex 16) && \
+_hex=$(openssl rand -hex 16) && \
+  nango_key=$(echo "$_hex" | sed 's/^\(.\{8\}\)\(.\{4\}\).\(.\{3\}\).\(.\{3\}\)\(.\{12\}\)$/\1-\2-4\3-a\4-\5/') && \
   echo "NANGO_SECRET_KEY_DEV=$nango_key" >> .env && \
   echo "Nango secret key: $nango_key (add this as NANGO_SECRET_KEY in your agents .env)"
 ```

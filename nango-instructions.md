@@ -38,7 +38,8 @@ Once Nango is running, configure the framework to connect to your local instance
 Generate a key and add it to your `.env` before starting Docker:
 
 ```bash
-nango_key=$(openssl rand -hex 16) && \
+_hex=$(openssl rand -hex 16) && \
+  nango_key=$(echo "$_hex" | sed 's/^\(.\{8\}\)\(.\{4\}\).\(.\{3\}\).\(.\{3\}\)\(.\{12\}\)$/\1-\2-4\3-a\4-\5/') && \
   echo "NANGO_SECRET_KEY_DEV=$nango_key" >> .env && \
   echo "Nango secret key: $nango_key"
 ```
@@ -100,11 +101,8 @@ docker compose up -d nango-server
 
 **Reset Nango data:**
 ```bash
-# Stop services
-docker compose down
-
-# Remove Nango data (caution: this deletes all configurations and connections)
-docker volume rm agents-optional-local-dev_nango-db
+# Stop services and remove all data volumes (caution: deletes all configurations and connections)
+docker compose down -v
 
 # Restart
 docker compose up -d
