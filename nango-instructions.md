@@ -1,8 +1,8 @@
 ## Nango: Setup and Configuration
 
-> **Note:** If you used the automated setup (`pnpm setup-dev:optional` from the [agents](https://github.com/inkeep/agents) monorepo), Nango is already configured and the API key is written to your `.env`. The steps below are for manual setup or troubleshooting.
+> **Note:** If you used `pnpm setup-dev:optional`, Nango is already configured. The steps below are for manual setup or troubleshooting.
 
-This guide covers how to configure the Inkeep Agents Framework to work with the self-hosted Nango instance.
+This guide covers configuring the Inkeep Agents Framework to use the self-hosted Nango instance.
 
 ### 1) Start Nango
 
@@ -27,15 +27,15 @@ docker compose up -d
 
 ### 2) Configure the framework to use Nango
 
-Once Nango is running, configure the framework to connect to your local instance.
+Once Nango is running, configure the framework to connect to it.
 
-**Important:** Use real credentials from your Nango dashboard (no placeholders). The framework rejects `your_nango_secret_key`.
+**Important:** Use real credentials from your Nango dashboard. The framework rejects placeholder values like `your_nango_secret_key`.
 
 #### Get your Nango API Key
 
 **Option A — Pre-set via environment variable (recommended):**
 
-Generate a key and add it to your `.env` before starting Docker:
+Generate a key and add it to `.env` before starting Docker:
 
 ```bash
 _hex=$(openssl rand -hex 16) && \
