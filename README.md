@@ -126,3 +126,12 @@ docker compose rm -f
 docker compose pull
 docker compose up -d
 ```
+
+---
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+This repository includes third-party configuration files under their own
+licenses (MIT, ELv2). See [NOTICE](NOTICE) for details.
