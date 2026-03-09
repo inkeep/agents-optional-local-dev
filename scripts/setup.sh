@@ -200,6 +200,13 @@ cmd_setup() {
   set_env_var "$COMPANION_ENV" "COMPOSE_PROFILES" "nango,signoz,otel-collector,jaeger"
   echo -e "  ${GREEN}✓${NC} COMPOSE_PROFILES set"
 
+  # SigNoz root user (used for automated API key creation)
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_ENABLED" "true"
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_EMAIL" "admin@localhost.dev"
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_PASSWORD" "LocalDev1234@"
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_ORG_NAME" "default"
+  echo -e "  ${GREEN}✓${NC} SigNoz root user configured"
+
   # ── Start Docker Compose ─────────────────────────────────────────────────
   echo ""
   echo "Starting optional services..."
