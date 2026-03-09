@@ -1,3 +1,10 @@
+connectors:
+  signozmeter:
+    metrics_flush_interval: 1h
+    dimensions:
+      - name: service.name
+      - name: deployment.environment
+      - name: host.name
 receivers:
   otlp:
     protocols:
@@ -18,8 +25,13 @@ receivers:
               job_name: otel-collector
 processors:
   batch:
-    send_batch_size: 1
+    send_batch_size: 10000
+    send_batch_max_size: 11000
     timeout: 10s
+  batch/meter:
+    send_batch_max_size: 25000
+    send_batch_size: 20000
+    timeout: 1s
   resourcedetection:
     # Using OTEL_RESOURCE_ATTRIBUTES envvar, env detector adds custom labels.
     detectors: [env, system]
@@ -36,9 +48,6 @@ processors:
         default: default
       - name: deployment.environment
         default: default
-      # This is added to ensure the uniqueness of the timeseries
-      # Otherwise, identical timeseries produced by multiple replicas of
-      # collectors result in incorrect APM metrics
       - name: signoz.collector.id
       - name: service.version
       - name: browser.platform
@@ -65,6 +74,17 @@ exporters:
     dsn: tcp://signoz-clickhouse:9000/signoz_logs
     timeout: 10s
     use_new_schema: true
+  signozclickhousemeter:
+    dsn: tcp://signoz-clickhouse:9000/signoz_meter
+    timeout: 45s
+    sending_queue:
+      enabled: false
+  metadataexporter:
+    cache:
+      provider: in_memory
+    dsn: tcp://signoz-clickhouse:9000/signoz_metadata
+    enabled: true
+    timeout: 45s
 service:
   telemetry:
     logs:
@@ -76,16 +96,20 @@ service:
     traces:
       receivers: [otlp]
       processors: [signozspanmetrics/delta, batch]
-      exporters: [clickhousetraces]
+      exporters: [clickhousetraces, metadataexporter, signozmeter]
     metrics:
       receivers: [otlp]
       processors: [batch]
-      exporters: [signozclickhousemetrics]
+      exporters: [signozclickhousemetrics, metadataexporter, signozmeter]
     metrics/prometheus:
       receivers: [prometheus]
       processors: [batch]
-      exporters: [signozclickhousemetrics]
+      exporters: [signozclickhousemetrics, metadataexporter, signozmeter]
     logs:
       receivers: [otlp]
       processors: [batch]
-      exporters: [clickhouselogsexporter]
+      exporters: [clickhouselogsexporter, metadataexporter, signozmeter]
+    metrics/meter:
+      receivers: [signozmeter]
+      processors: [batch/meter]
+      exporters: [signozclickhousemeter]
