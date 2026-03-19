@@ -137,6 +137,7 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - otel-collector-net
+      - signoz-net
 
   # SigNoz Infrastructure Services
   signoz-init-clickhouse:
