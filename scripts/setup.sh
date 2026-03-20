@@ -244,7 +244,6 @@ cmd_setup() {
 
   # OTEL vars (no auth required for sending traces)
   set_env_var "$ENV_FILE" "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" "http://localhost:14318/v1/traces"
-  set_env_var "$ENV_FILE" "OTEL_SERVICE_NAME" "inkeep-agents"
   echo -e "  ${GREEN}✓${NC} OTEL env vars written to .env"
 
   # SigNoz (non-fatal — SigNoz has many infra services and may be slow to start)
