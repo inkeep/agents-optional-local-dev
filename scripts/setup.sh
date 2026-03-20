@@ -200,10 +200,15 @@ cmd_setup() {
   set_env_var "$COMPANION_ENV" "COMPOSE_PROFILES" "nango,signoz,otel-collector,jaeger"
   echo -e "  ${GREEN}✓${NC} COMPOSE_PROFILES set"
 
-  # SigNoz root user — always set valid credentials, but only enable provisioning on first run (no API key yet).
-  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_EMAIL" "admin@localhost.dev"
-  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_PASSWORD" "LocalDev1234@"
-  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_ORG_NAME" "default"
+  # SigNoz credentials — single source of truth for root-user provisioning + API key automation.
+  SIGNOZ_URL="http://localhost:3080"
+  SIGNOZ_USER_ROOT_EMAIL="admin@localhost.dev"
+  SIGNOZ_USER_ROOT_PASSWORD='LocalDev1234@'
+  SIGNOZ_USER_ROOT_ORG_NAME="default"
+
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_EMAIL" "$SIGNOZ_USER_ROOT_EMAIL"
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_PASSWORD" "$SIGNOZ_USER_ROOT_PASSWORD"
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_ORG_NAME" "$SIGNOZ_USER_ROOT_ORG_NAME"
   EXISTING_SIGNOZ_KEY="$(get_env_var "$ENV_FILE" "SIGNOZ_API_KEY")"
   if [ -n "$EXISTING_SIGNOZ_KEY" ]; then
     set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_ENABLED" "false"
@@ -263,20 +268,10 @@ cmd_setup() {
   elif [ "$SIGNOZ_READY" = "0" ]; then
     echo -e "  ${YELLOW}⚠️  Skipped — SigNoz not ready yet. Re-run 'pnpm setup-dev:optional' once it's up.${NC}"
   else
-    SIGNOZ_URL="http://localhost:3080"
-    SIGNOZ_EMAIL="admin@localhost.dev"
-    SIGNOZ_PASSWORD='LocalDev1234@'
-
-    # Register admin (idempotent — fails silently on re-run)
-    curl -s -X POST "$SIGNOZ_URL/api/v1/register" \
-      -H "Content-Type: application/json" \
-      -d "{\"name\":\"Admin\",\"email\":\"$SIGNOZ_EMAIL\",\"password\":\"$SIGNOZ_PASSWORD\",\"orgDisplayName\":\"Local Dev\"}" \
-      >/dev/null 2>&1 || true
-
     # Login to get JWT (use -s without -f so we get the response body on errors too)
     LOGIN_RESPONSE=$(curl -s -X POST "$SIGNOZ_URL/api/v1/login" \
       -H "Content-Type: application/json" \
-      -d "{\"email\":\"$SIGNOZ_EMAIL\",\"password\":\"$SIGNOZ_PASSWORD\"}" 2>/dev/null || echo "")
+      -d "{\"email\":\"$SIGNOZ_USER_ROOT_EMAIL\",\"password\":\"$SIGNOZ_USER_ROOT_PASSWORD\"}" 2>/dev/null || echo "")
 
     if [ -n "$LOGIN_RESPONSE" ]; then
       ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||d).accessJwt||'')" 2>/dev/null || echo "")
