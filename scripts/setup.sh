@@ -197,6 +197,16 @@ cmd_setup() {
     echo -e "  ${GREEN}✓${NC} Generated NANGO_SECRET_KEY"
   fi
 
+  # Generate JWT signing secret for SigNoz 
+  EXISTING_JWT_SECRET="$(get_env_var "$COMPANION_ENV" "SIGNOZ_TOKENIZER_JWT_SECRET")"
+  if [ -z "$EXISTING_JWT_SECRET" ]; then
+    JWT_SECRET="$(openssl rand -base64 32)"
+    set_env_var "$COMPANION_ENV" "SIGNOZ_TOKENIZER_JWT_SECRET" "$JWT_SECRET"
+    echo -e "  ${GREEN}✓${NC} Generated SIGNOZ_TOKENIZER_JWT_SECRET"
+  else
+    echo -e "  ${GREEN}✓${NC} SIGNOZ_TOKENIZER_JWT_SECRET already set"
+  fi
+
   set_env_var "$COMPANION_ENV" "COMPOSE_PROFILES" "nango,signoz,otel-collector,jaeger"
   echo -e "  ${GREEN}✓${NC} COMPOSE_PROFILES set"
 
