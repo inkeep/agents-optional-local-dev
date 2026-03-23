@@ -267,20 +267,37 @@ cmd_setup() {
   elif [ "$SIGNOZ_READY" = "0" ]; then
     echo -e "  ${YELLOW}⚠️  Skipped — SigNoz not ready yet. Re-run 'pnpm setup-dev:optional' once it's up.${NC}"
   else
-    # Login to get JWT (use -s without -f so we get the response body on errors too)
-    LOGIN_RESPONSE=$(curl -s -X POST "$SIGNOZ_URL/api/v1/login" \
-      -H "Content-Type: application/json" \
-      -d "{\"email\":\"$SIGNOZ_USER_ROOT_EMAIL\",\"password\":\"$SIGNOZ_USER_ROOT_PASSWORD\"}" 2>/dev/null || echo "")
+    # Step 1: Get session context to retrieve orgId
+    CONTEXT_RESPONSE=$(curl -s -G "$SIGNOZ_URL/api/v2/sessions/context" \
+      --data-urlencode "email=$SIGNOZ_USER_ROOT_EMAIL" \
+      --data-urlencode "ref=$SIGNOZ_URL" 2>/dev/null || echo "")
 
-    if [ -n "$LOGIN_RESPONSE" ]; then
-      ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||d).accessJwt||'')" 2>/dev/null || echo "")
+    ORG_ID=""
+    if [ -n "$CONTEXT_RESPONSE" ]; then
+      ORG_ID=$(echo "$CONTEXT_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||{}).orgs?.[0]?.id||'')" 2>/dev/null || echo "")
+    fi
 
-      if [ -n "$ACCESS_TOKEN" ]; then
-        # Create PAT (use -s without -f)
+    if [ -z "$ORG_ID" ]; then
+      echo -e "  ${YELLOW}⚠️  Could not retrieve SigNoz org. You may need to create an API key manually at $SIGNOZ_URL${NC}"
+    else
+      # Step 2: Create session with email_password
+      LOGIN_RESPONSE=$(curl -s -X POST "$SIGNOZ_URL/api/v2/sessions/email_password" \
+        -H "Content-Type: application/json" \
+        -d "{\"email\":\"$SIGNOZ_USER_ROOT_EMAIL\",\"password\":\"$SIGNOZ_USER_ROOT_PASSWORD\",\"orgId\":\"$ORG_ID\"}" 2>/dev/null || echo "")
+
+      ACCESS_TOKEN=""
+      if [ -n "$LOGIN_RESPONSE" ]; then
+        ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||d).accessToken||'')" 2>/dev/null || echo "")
+      fi
+
+      if [ -z "$ACCESS_TOKEN" ]; then
+        echo -e "  ${YELLOW}⚠️  Could not login to SigNoz. You may need to create an API key manually at $SIGNOZ_URL${NC}"
+      else
+        # Step 3: Create PAT
         PAT_RESPONSE=$(curl -s -X POST "$SIGNOZ_URL/api/v1/pats" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $ACCESS_TOKEN" \
-          -d '{"name":"local-dev-automation","role":"ADMIN","expiresAt":0}' 2>/dev/null || echo "")
+          -d '{"name":"local-dev-automation","role":"ADMIN","expiresInDays":0}' 2>/dev/null || echo "")
 
         if [ -n "$PAT_RESPONSE" ]; then
           SIGNOZ_API_KEY=$(echo "$PAT_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||d).token||'')" 2>/dev/null || echo "")
@@ -294,11 +311,7 @@ cmd_setup() {
         else
           echo -e "  ${YELLOW}⚠️  Could not create SigNoz PAT. You may need to create one manually at $SIGNOZ_URL${NC}"
         fi
-      else
-        echo -e "  ${YELLOW}⚠️  Could not login to SigNoz. You may need to create an API key manually at $SIGNOZ_URL${NC}"
       fi
-    else
-      echo -e "  ${YELLOW}⚠️  Could not connect to SigNoz API. You may need to create an API key manually at $SIGNOZ_URL${NC}"
     fi
   fi
 
