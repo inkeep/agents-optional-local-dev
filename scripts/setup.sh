@@ -202,8 +202,8 @@ cmd_setup() {
 
   # SigNoz credentials — single source of truth for root-user provisioning + API key automation.
   SIGNOZ_URL="http://localhost:3080"
-  SIGNOZ_USER_ROOT_EMAIL="admin@localhost.dev"
-  SIGNOZ_USER_ROOT_PASSWORD='LocalDev1234@'
+  SIGNOZ_USER_ROOT_EMAIL="admin@example.com"
+  SIGNOZ_USER_ROOT_PASSWORD="adminADMIN!@12"
   SIGNOZ_USER_ROOT_ORG_NAME="default"
 
   set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_EMAIL" "$SIGNOZ_USER_ROOT_EMAIL"
