@@ -197,8 +197,36 @@ cmd_setup() {
     echo -e "  ${GREEN}✓${NC} Generated NANGO_SECRET_KEY"
   fi
 
+  # Generate JWT signing secret for SigNoz 
+  EXISTING_JWT_SECRET="$(get_env_var "$COMPANION_ENV" "SIGNOZ_TOKENIZER_JWT_SECRET")"
+  if [ -z "$EXISTING_JWT_SECRET" ]; then
+    JWT_SECRET="$(openssl rand -base64 32)"
+    set_env_var "$COMPANION_ENV" "SIGNOZ_TOKENIZER_JWT_SECRET" "$JWT_SECRET"
+    echo -e "  ${GREEN}✓${NC} Generated SIGNOZ_TOKENIZER_JWT_SECRET"
+  else
+    echo -e "  ${GREEN}✓${NC} SIGNOZ_TOKENIZER_JWT_SECRET already set"
+  fi
+
   set_env_var "$COMPANION_ENV" "COMPOSE_PROFILES" "nango,signoz,otel-collector,jaeger"
   echo -e "  ${GREEN}✓${NC} COMPOSE_PROFILES set"
+
+  # SigNoz credentials — single source of truth for root-user provisioning + API key automation.
+  SIGNOZ_URL="http://localhost:3080"
+  SIGNOZ_USER_ROOT_EMAIL="admin@example.com"
+  SIGNOZ_USER_ROOT_PASSWORD="adminADMIN!@12"
+  SIGNOZ_USER_ROOT_ORG_NAME="default"
+
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_EMAIL" "$SIGNOZ_USER_ROOT_EMAIL"
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_PASSWORD" "$SIGNOZ_USER_ROOT_PASSWORD"
+  set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_ORG_NAME" "$SIGNOZ_USER_ROOT_ORG_NAME"
+  EXISTING_SIGNOZ_KEY="$(get_env_var "$ENV_FILE" "SIGNOZ_API_KEY")"
+  if [ -n "$EXISTING_SIGNOZ_KEY" ]; then
+    set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_ENABLED" "false"
+    echo -e "  ${GREEN}✓${NC} SigNoz root user skipped (API key already exists)"
+  else
+    set_env_var "$COMPANION_ENV" "SIGNOZ_USER_ROOT_ENABLED" "true"
+    echo -e "  ${GREEN}✓${NC} SigNoz root user configured"
+  fi
 
   # ── Start Docker Compose ─────────────────────────────────────────────────
   echo ""
@@ -226,7 +254,6 @@ cmd_setup() {
 
   # OTEL vars (no auth required for sending traces)
   set_env_var "$ENV_FILE" "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" "http://localhost:14318/v1/traces"
-  set_env_var "$ENV_FILE" "OTEL_SERVICE_NAME" "inkeep-agents"
   echo -e "  ${GREEN}✓${NC} OTEL env vars written to .env"
 
   # SigNoz (non-fatal — SigNoz has many infra services and may be slow to start)
@@ -250,30 +277,37 @@ cmd_setup() {
   elif [ "$SIGNOZ_READY" = "0" ]; then
     echo -e "  ${YELLOW}⚠️  Skipped — SigNoz not ready yet. Re-run 'pnpm setup-dev:optional' once it's up.${NC}"
   else
-    SIGNOZ_URL="http://localhost:3080"
-    SIGNOZ_EMAIL="admin@localhost.dev"
-    SIGNOZ_PASSWORD='LocalDev1234@'
+    # Step 1: Get session context to retrieve orgId
+    CONTEXT_RESPONSE=$(curl -s -G "$SIGNOZ_URL/api/v2/sessions/context" \
+      --data-urlencode "email=$SIGNOZ_USER_ROOT_EMAIL" \
+      --data-urlencode "ref=$SIGNOZ_URL" 2>/dev/null || echo "")
 
-    # Register admin (idempotent — fails silently on re-run)
-    curl -s -X POST "$SIGNOZ_URL/api/v1/register" \
-      -H "Content-Type: application/json" \
-      -d "{\"name\":\"Admin\",\"email\":\"$SIGNOZ_EMAIL\",\"password\":\"$SIGNOZ_PASSWORD\",\"orgDisplayName\":\"Local Dev\"}" \
-      >/dev/null 2>&1 || true
+    ORG_ID=""
+    if [ -n "$CONTEXT_RESPONSE" ]; then
+      ORG_ID=$(echo "$CONTEXT_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||{}).orgs?.[0]?.id||'')" 2>/dev/null || echo "")
+    fi
 
-    # Login to get JWT (use -s without -f so we get the response body on errors too)
-    LOGIN_RESPONSE=$(curl -s -X POST "$SIGNOZ_URL/api/v1/login" \
-      -H "Content-Type: application/json" \
-      -d "{\"email\":\"$SIGNOZ_EMAIL\",\"password\":\"$SIGNOZ_PASSWORD\"}" 2>/dev/null || echo "")
+    if [ -z "$ORG_ID" ]; then
+      echo -e "  ${YELLOW}⚠️  Could not retrieve SigNoz org. You may need to create an API key manually at $SIGNOZ_URL${NC}"
+    else
+      # Step 2: Create session with email_password
+      LOGIN_RESPONSE=$(curl -s -X POST "$SIGNOZ_URL/api/v2/sessions/email_password" \
+        -H "Content-Type: application/json" \
+        -d "{\"email\":\"$SIGNOZ_USER_ROOT_EMAIL\",\"password\":\"$SIGNOZ_USER_ROOT_PASSWORD\",\"orgId\":\"$ORG_ID\"}" 2>/dev/null || echo "")
 
-    if [ -n "$LOGIN_RESPONSE" ]; then
-      ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||d).accessJwt||'')" 2>/dev/null || echo "")
+      ACCESS_TOKEN=""
+      if [ -n "$LOGIN_RESPONSE" ]; then
+        ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||d).accessToken||'')" 2>/dev/null || echo "")
+      fi
 
-      if [ -n "$ACCESS_TOKEN" ]; then
-        # Create PAT (use -s without -f)
+      if [ -z "$ACCESS_TOKEN" ]; then
+        echo -e "  ${YELLOW}⚠️  Could not login to SigNoz. You may need to create an API key manually at $SIGNOZ_URL${NC}"
+      else
+        # Step 3: Create PAT
         PAT_RESPONSE=$(curl -s -X POST "$SIGNOZ_URL/api/v1/pats" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $ACCESS_TOKEN" \
-          -d '{"name":"local-dev-automation","role":"ADMIN","expiresAt":0}' 2>/dev/null || echo "")
+          -d '{"name":"local-dev-automation","role":"ADMIN","expiresInDays":0}' 2>/dev/null || echo "")
 
         if [ -n "$PAT_RESPONSE" ]; then
           SIGNOZ_API_KEY=$(echo "$PAT_RESPONSE" | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log((d.data||d).token||'')" 2>/dev/null || echo "")
@@ -287,11 +321,7 @@ cmd_setup() {
         else
           echo -e "  ${YELLOW}⚠️  Could not create SigNoz PAT. You may need to create one manually at $SIGNOZ_URL${NC}"
         fi
-      else
-        echo -e "  ${YELLOW}⚠️  Could not login to SigNoz. You may need to create an API key manually at $SIGNOZ_URL${NC}"
       fi
-    else
-      echo -e "  ${YELLOW}⚠️  Could not connect to SigNoz API. You may need to create an API key manually at $SIGNOZ_URL${NC}"
     fi
   fi
 
