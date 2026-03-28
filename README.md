@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > These Docker Compose configurations are for local development and testing only.
-> Please review carefully before using in a production environment
+> Please review carefully before using in a production environment.
 
 ## Automated setup (recommended)
 
