@@ -73,6 +73,7 @@ Clone as `.optional-services/` (matching the automated setup default) or any dir
 
 ### 2. Configure environment variables
 
+Run this command to autogenerate a `.env` file from the template `.env.docker.example`:
 ```bash
 ./scripts/generate-env-from-example.sh
 ```
