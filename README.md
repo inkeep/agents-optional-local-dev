@@ -74,16 +74,7 @@ Clone as `.optional-services/` (matching the automated setup default) or any dir
 ### 2. Configure environment variables
 
 ```bash
-cp .env.docker.example .env && \
-  nango_encryption_key=$(openssl rand -base64 32) && \
-  nango_dashboard_password=$(openssl rand -base64 8) && \
-  tmp_file=$(mktemp) && \
-  sed \
-    -e "s|<REPLACE_WITH_NANGO_ENCRYPTION_KEY>|$nango_encryption_key|" \
-    -e "s|<REPLACE_WITH_NANGO_DASHBOARD_PASSWORD>|$nango_dashboard_password|" \
-    .env > "$tmp_file" && \
-  mv "$tmp_file" .env && \
-  echo ".env created with auto-generated NANGO_ENCRYPTION_KEY and NANGO_DASHBOARD_PASSWORD"
+./scripts/generate-env-from-example.sh
 ```
 
 Optionally, pre-generate a Nango secret key (avoids retrieving it from the dashboard later):
@@ -124,7 +115,7 @@ Otherwise, retrieve it from the Nango dashboard:
 docker compose stop
 docker compose rm -f
 docker compose pull
-docker compose up -d
+docker compose up -d --remove-orphans
 ```
 
 ---
