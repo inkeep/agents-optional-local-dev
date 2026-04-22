@@ -44,7 +44,11 @@ async function githubRequest({
     throw new Error(`${method} ${requestPath} failed (${response.status}): ${text}`);
   }
 
-  return accept === "application/vnd.github.patch" ? text : (text ? JSON.parse(text) : null);
+  // .patch and .diff return raw text, not JSON. All other accept types
+  // (incl. the default application/vnd.github+json) return JSON.
+  const isTextResponse =
+    accept === "application/vnd.github.patch" || accept === "application/vnd.github.diff";
+  return isTextResponse ? text : (text ? JSON.parse(text) : null);
 }
 
 async function githubGraphql({ token, query, variables }) {
@@ -139,12 +143,15 @@ function buildBridgeMetadata(publicPr, mirrorPath) {
   ].join("\n");
 }
 
+// GitHub PR body hard limit. Exceeding returns 422 "body is too long".
+const GITHUB_PR_BODY_LIMIT = 65536;
+
 function buildInternalPrBody({ publicPr, branchName, mirrorPath }) {
-  const originalBody = publicPr.body?.trim()
+  const rawOriginal = publicPr.body?.trim()
     ? publicPr.body.trim()
     : "_No public PR body was provided._";
 
-  return `## Summary
+  const compose = (original) => `## Summary
 Mirror public PR [#${publicPr.number}](${publicPr.html_url}) from \`${publicPr.base.repo.full_name}\` into \`inkeep/agents-private\` for canonical review and merge.
 
 ## Attribution
@@ -157,7 +164,7 @@ Mirror public PR [#${publicPr.number}](${publicPr.html_url}) from \`${publicPr.b
 <details>
 <summary>Expand</summary>
 
-${originalBody}
+${original}
 
 </details>
 
@@ -167,6 +174,20 @@ ${originalBody}
 - After the internal PR merges, the public repo should be updated by the next non-dry-run mirror sync.
 
 ${buildBridgeMetadata(publicPr, mirrorPath)}`;
+
+  let body = compose(rawOriginal);
+  if (body.length > GITHUB_PR_BODY_LIMIT) {
+    const footer = `\n\n_...truncated. Original body exceeded GitHub's ${GITHUB_PR_BODY_LIMIT}-char PR body limit; see [original PR](${publicPr.html_url}) for full content._`;
+    const scaffolding = body.length - rawOriginal.length;
+    const budget = GITHUB_PR_BODY_LIMIT - scaffolding - footer.length - 100;
+    const truncated = rawOriginal.slice(0, Math.max(budget, 0)) + footer;
+    console.log(
+      `Bridge: PR body exceeded GitHub's ${GITHUB_PR_BODY_LIMIT}-char limit ` +
+        `(original: ${rawOriginal.length} chars, truncated to: ${truncated.length} chars).`,
+    );
+    body = compose(truncated);
+  }
+  return body;
 }
 
 function buildPublicComment({ publicPr, internalPr, status, details }) {
@@ -335,10 +356,15 @@ async function syncPublicPr() {
 
   let hasStagedChanges = false;
   if (!metadataOnlyAction) {
+    // Use .diff (unified squash) not .patch (multi-commit mailbox). .patch
+    // returns one patch per commit with intermediate blob SHAs that only
+    // exist in the public repo; any conflicting hunk forces --3way to look
+    // up those intermediates and fail. See agents copy of this script for
+    // full rationale.
     const patch = await githubRequest({
       token: publicToken,
       path: `/repos/${publicRepo}/pulls/${publicPrNumber}`,
-      accept: "application/vnd.github.patch",
+      accept: "application/vnd.github.diff",
     });
 
     if (!patch.trim()) {
