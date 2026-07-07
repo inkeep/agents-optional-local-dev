@@ -1,15 +1,15 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 // Keep the public PR bridge copies code-shape aligned. They ship to
 // separate public repos through Copybara, so they cannot import shared code.
 // Sibling bridge copies:
 // - public/agents/.github/scripts/bridge-public-pr-to-monorepo.mjs
 // - public/open-knowledge/.github/scripts/bridge-public-pr-to-monorepo.mjs
-const BRIDGE_COMMENT_MARKER = "<!-- monorepo-pr-bridge -->";
+const BRIDGE_COMMENT_MARKER = '<!-- monorepo-pr-bridge -->';
 
 // Strip x-access-token credentials from any string that might end up in an
 // error message, log line, or thrown exception. GitHub Actions masks repo
@@ -19,40 +19,40 @@ const BRIDGE_COMMENT_MARKER = "<!-- monorepo-pr-bridge -->";
 // reporting integrations — none of which inherit the Actions log mask.
 // Defense-in-depth: redact at the boundary.
 function sanitizeErrorMessage(value) {
-  if (typeof value !== "string") return value;
-  return value.replace(/https:\/\/x-access-token:[^@\s]+@/g, "https://x-access-token:***@");
+  if (typeof value !== 'string') return value;
+  return value.replace(/https:\/\/x-access-token:[^@\s]+@/g, 'https://x-access-token:***@');
 }
 
 function run(command, args, options = {}) {
   try {
     return execFileSync(command, args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
       ...options,
     }).trim();
   } catch (error) {
-    const stderr = sanitizeErrorMessage(error.stderr?.toString().trim() ?? "");
-    const stdout = sanitizeErrorMessage(error.stdout?.toString().trim() ?? "");
-    const details = [stderr, stdout].filter(Boolean).join("\n");
-    const fallback = sanitizeErrorMessage(`${command} ${args.join(" ")} failed`);
+    const stderr = sanitizeErrorMessage(error.stderr?.toString().trim() ?? '');
+    const stdout = sanitizeErrorMessage(error.stdout?.toString().trim() ?? '');
+    const details = [stderr, stdout].filter(Boolean).join('\n');
+    const fallback = sanitizeErrorMessage(`${command} ${args.join(' ')} failed`);
     throw new Error(details || fallback);
   }
 }
 
 async function githubRequest({
   token,
-  method = "GET",
+  method = 'GET',
   path: requestPath,
   body,
-  accept = "application/vnd.github+json",
+  accept = 'application/vnd.github+json',
 }) {
   const response = await fetch(`https://api.github.com${requestPath}`, {
     method,
     headers: {
       Accept: accept,
       Authorization: `Bearer ${token}`,
-      "User-Agent": "inkeep-public-pr-bridge",
-      ...(body ? { "Content-Type": "application/json" } : {}),
+      'User-Agent': 'inkeep-public-pr-bridge',
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -65,19 +65,19 @@ async function githubRequest({
   // .patch and .diff return raw text, not JSON. All other accept types
   // (incl. the default application/vnd.github+json) return JSON.
   const isTextResponse =
-    accept === "application/vnd.github.patch" || accept === "application/vnd.github.diff";
-  return isTextResponse ? text : (text ? JSON.parse(text) : null);
+    accept === 'application/vnd.github.patch' || accept === 'application/vnd.github.diff';
+  return isTextResponse ? text : text ? JSON.parse(text) : null;
 }
 
 async function githubGraphql({ token, query, variables }) {
   const result = await githubRequest({
     token,
-    method: "POST",
-    path: "/graphql",
+    method: 'POST',
+    path: '/graphql',
     body: { query, variables },
   });
   if (result?.errors?.length) {
-    const messages = result.errors.map((e) => e.message).join("; ");
+    const messages = result.errors.map((e) => e.message).join('; ');
     throw new Error(`GraphQL error: ${messages}`);
   }
   return result;
@@ -108,8 +108,8 @@ function parseJsonEnv(name, fallback) {
   }
 }
 
-function fallbackPublicAuthor(publicPr) {
-  return normalizeGitHubUserAuthor(publicPr.user) ?? {
+function publicPrAuthor(publicPr) {
+  return {
     name: publicPr.user.login,
     email: `${publicPr.user.id}+${publicPr.user.login}@users.noreply.github.com`,
   };
@@ -119,7 +119,6 @@ function normalizeGitHubUserAuthor(user) {
   const login = user?.login?.trim();
   const id = user?.id;
   if (!login || id === undefined || id === null) return null;
-  if (/\[bot\]$/i.test(login)) return null;
   return {
     name: login,
     email: `${id}+${login}@users.noreply.github.com`,
@@ -129,48 +128,104 @@ function normalizeGitHubUserAuthor(user) {
 function normalizeCommitAuthor(author) {
   const name = author?.name?.trim();
   const email = author?.email?.trim();
-  if (!name || !email || !email.includes("@")) return null;
+  if (!name || !email || !email.includes('@')) return null;
   if (/[\r\n<>]/.test(name) || /[\r\n<>]/.test(email)) return null;
-  if (/oss-sync@inkeep\.com$/i.test(email) || /public-pr-bridge@inkeep\.com$/i.test(email)) {
-    return null;
-  }
-  if (/\[bot\]$/i.test(name) || /\[bot\]@users\.noreply\.github\.com$/i.test(email)) {
-    return null;
-  }
   return { name, email };
 }
 
-function uniqueCommitAuthors(authors, fallbackAuthor) {
+function parseCoauthorTrailer(line) {
+  const match = line.match(/^Co-authored-by:\s*(.+?)\s*<([^<>\s]+@[^<>\s]+)>\s*$/i);
+  if (!match) return null;
+  return normalizeCommitAuthor({ name: match[1], email: match[2] });
+}
+
+function coauthorsFromCommitMessage(message) {
+  return normalizeCommitMessage(message)
+    .split('\n')
+    .map((line) => parseCoauthorTrailer(line.trim()))
+    .filter(Boolean);
+}
+
+function uniqueCommitAuthors(authors) {
   const unique = new Map();
   for (const author of authors) {
     const normalized = normalizeCommitAuthor(author);
     if (!normalized) continue;
     unique.set(`${normalized.name.toLowerCase()} <${normalized.email.toLowerCase()}>`, normalized);
   }
-  return unique.size > 0 ? [...unique.values()] : [fallbackAuthor];
+  return [...unique.values()];
 }
 
-async function listPublicPrCommitAuthors({ token, repo, prNumber, request = githubRequest }) {
-  const commitAuthors = [];
+function normalizePublicPrCommit(commit) {
+  return {
+    sha: typeof commit?.sha === 'string' ? commit.sha : null,
+    author: normalizeGitHubUserAuthor(commit?.author) ?? commit?.commit?.author,
+    message: typeof commit?.commit?.message === 'string' ? commit.commit.message : '',
+  };
+}
+
+async function listPublicPrCommits({ token, repo, prNumber, request = githubRequest }) {
+  const publicCommits = [];
   let page = 1;
   while (true) {
     const commits = await request({
       token,
       path: `/repos/${repo}/pulls/${prNumber}/commits?per_page=100&page=${page}`,
     });
-    commitAuthors.push(
-      ...commits.map((commit) => normalizeGitHubUserAuthor(commit.author) ?? commit.commit?.author),
-    );
+    publicCommits.push(...commits.map((commit) => normalizePublicPrCommit(commit)));
     if (commits.length < 100) break;
     page++;
   }
-  return commitAuthors;
+  return publicCommits;
 }
 
-function buildCommitAttribution({ commitAuthors, fallbackAuthor }) {
-  const authors = uniqueCommitAuthors(commitAuthors, fallbackAuthor);
+function normalizeCommitMessage(message) {
+  if (typeof message !== 'string') return '';
+  return message.replace(/\r\n?/g, '\n').replace(/\0/g, '').trim();
+}
+
+function formatOriginalCommitMessages(commitMessages, publicRepo) {
+  const entries = commitMessages
+    .map((commit) => {
+      const message = normalizeCommitMessage(commit?.message);
+      if (!message) return null;
+      const rawSha = typeof commit?.sha === 'string' ? commit.sha : '';
+      const sha = /^[0-9a-f]{7,40}$/i.test(rawSha) ? rawSha : null;
+      const shortSha = sha ? sha.slice(0, 7) : null;
+      const author = normalizeCommitAuthor(commit?.author);
+      return { author, sha, shortSha, message };
+    })
+    .filter(Boolean);
+
+  if (entries.length === 0) return '';
+
+  const formatted = entries.map((entry, index) => {
+    const [subject, ...bodyLines] = entry.message.split('\n');
+    const body =
+      bodyLines.length > 0 ? `\n\n${bodyLines.map((line) => `   ${line}`).join('\n')}` : '';
+    const author = entry.author ? `\n   Author: ${entry.author.name} <${entry.author.email}>` : '';
+    if (entry.sha && entry.shortSha && publicRepo) {
+      return `${index + 1}. [${entry.shortSha}](https://github.com/${publicRepo}/commit/${entry.sha}) ${subject}${author}${body}`;
+    }
+    const prefix = entry.shortSha
+      ? `${index + 1}. ${entry.shortSha} ${subject}`
+      : `${index + 1}. ${subject}`;
+    return `${prefix}${author}${body}`;
+  });
+
+  return ['Commits:', '', ...formatted].join('\n');
+}
+
+function buildCommitAttribution({ commitAuthors, commitMessages = [], publicRepo }) {
+  const authors = uniqueCommitAuthors([
+    ...commitAuthors,
+    ...commitMessages.map((commit) => commit?.author),
+    ...commitMessages.flatMap((commit) => coauthorsFromCommitMessage(commit?.message)),
+  ]);
   const trailers = authors.map((author) => `Co-authored-by: ${author.name} <${author.email}>`);
-  return { trailers };
+  const originalCommitMessages = formatOriginalCommitMessages(commitMessages, publicRepo);
+  const body = [originalCommitMessages, trailers.join('\n')].filter(Boolean).join('\n\n');
+  return { trailers, originalCommitMessages, body };
 }
 
 // True when a `githubRequest` failed because the PR diff exceeds GitHub's
@@ -182,9 +237,9 @@ function buildCommitAttribution({ commitAuthors, fallbackAuthor }) {
 // (e.g. PR body validation `{"code":"too_long"}` is adjacent — `too_large`
 // itself is rare for non-diff endpoints, but we don't rely on coincidence).
 function isDiffTooLargeError(error) {
-  if (!error || typeof error.message !== "string") return false;
+  if (!error || typeof error.message !== 'string') return false;
   return /diff exceeded the maximum number of lines|diff is too large|diff_too_large/i.test(
-    error.message,
+    error.message
   );
 }
 
@@ -199,11 +254,9 @@ function isDiffTooLargeError(error) {
 // oversized PRs (>20,000 lines on the API endpoint). Node's default 1 MB
 // would truncate the very diffs this path is meant to handle.
 function fetchPullRequestDiffViaLocalGit({ internalRepoDir, sourceBaseRef, sourceHeadRef }) {
-  return run(
-    "git",
-    ["-C", internalRepoDir, "diff", `${sourceBaseRef}...${sourceHeadRef}`],
-    { maxBuffer: 50 * 1024 * 1024 },
-  );
+  return run('git', ['-C', internalRepoDir, 'diff', `${sourceBaseRef}...${sourceHeadRef}`], {
+    maxBuffer: 50 * 1024 * 1024,
+  });
 }
 
 async function fetchPullRequestDiff({
@@ -219,7 +272,7 @@ async function fetchPullRequestDiff({
     return await githubRequest({
       token: publicToken,
       path: `/repos/${publicRepo}/pulls/${publicPr.number}`,
-      accept: "application/vnd.github.diff",
+      accept: 'application/vnd.github.diff',
     });
   } catch (error) {
     if (!isDiffTooLargeError(error)) throw error;
@@ -228,14 +281,18 @@ async function fetchPullRequestDiff({
         `Bridge: cannot use local-git-diff fallback for PR #${publicPr.number} — ` +
           `the public PR refs failed to fetch into agents-private earlier in this run. ` +
           `See the preceding "Bridge: fetch at --depth=..." warning for the original ` +
-          `fetch failure; resolve that and re-run.`,
+          `fetch failure; resolve that and re-run.`
       );
     }
     console.log(
       `Bridge: GitHub diff API rejected PR #${publicPr.number} as too large; ` +
-        "falling back to local git diff against fetched public PR refs.",
+        'falling back to local git diff against fetched public PR refs.'
     );
-    return fetchPullRequestDiffViaLocalGit({ internalRepoDir, sourceBaseRef, sourceHeadRef });
+    return fetchPullRequestDiffViaLocalGit({
+      internalRepoDir,
+      sourceBaseRef,
+      sourceHeadRef,
+    });
   }
 }
 
@@ -253,7 +310,7 @@ function filterDiffByPath(patch, excludedPrefixes) {
   const dropped = [];
 
   for (const section of sections) {
-    if (!section.startsWith("diff --git ")) {
+    if (!section.startsWith('diff --git ')) {
       kept.push(section);
       continue;
     }
@@ -262,11 +319,11 @@ function filterDiffByPath(patch, excludedPrefixes) {
       kept.push(section);
       continue;
     }
-    const aPath = match[1].replace(/^"(.+)"$/, "$1");
-    const bPath = match[2].replace(/^"(.+)"$/, "$1");
+    const aPath = match[1].replace(/^"(.+)"$/, '$1');
+    const bPath = match[2].replace(/^"(.+)"$/, '$1');
 
     const isExcluded = excludedPrefixes.some(
-      (prefix) => aPath.startsWith(prefix) || bPath.startsWith(prefix),
+      (prefix) => aPath.startsWith(prefix) || bPath.startsWith(prefix)
     );
 
     if (isExcluded) {
@@ -277,72 +334,72 @@ function filterDiffByPath(patch, excludedPrefixes) {
   }
 
   if (dropped.length > 0) {
-    const preview = dropped.slice(0, 20).join("\n  ");
-    const more = dropped.length > 20 ? `\n  ...and ${dropped.length - 20} more` : "";
+    const preview = dropped.slice(0, 20).join('\n  ');
+    const more = dropped.length > 20 ? `\n  ...and ${dropped.length - 20} more` : '';
     console.log(
-      `Bridge: filtered ${dropped.length} diff section(s) matching excluded prefixes:\n  ${preview}${more}`,
+      `Bridge: filtered ${dropped.length} diff section(s) matching excluded prefixes:\n  ${preview}${more}`
     );
   }
 
-  return kept.join("");
+  return kept.join('');
 }
 
 function prefixPatchPaths(patch, prefix, pathRewrites = {}) {
-  const normalizedPrefix = prefix.replace(/^\/+|\/+$/g, "");
+  const normalizedPrefix = prefix.replace(/^\/+|\/+$/g, '');
   const prefixedPath = (value) => {
-    if (value === "/dev/null") {
+    if (value === '/dev/null') {
       return value;
     }
 
-    const unquoted = value.replace(/^"(.+)"$/, "$1");
-    const segments = unquoted.split("/");
-    if (segments.some((s) => s === ".." || s === ".")) {
+    const unquoted = value.replace(/^"(.+)"$/, '$1');
+    const segments = unquoted.split('/');
+    if (segments.some((s) => s === '..' || s === '.')) {
       throw new Error(`Rejecting patch with path traversal: ${unquoted}`);
     }
 
     const rewrite = pathRewrites[unquoted];
     if (rewrite) {
-      const rewriteSegments = rewrite.split("/");
-      if (rewriteSegments.some((s) => s === ".." || s === ".")) {
+      const rewriteSegments = rewrite.split('/');
+      if (rewriteSegments.some((s) => s === '..' || s === '.')) {
         throw new Error(`Rejecting patch rewrite with path traversal: ${rewrite}`);
       }
     }
 
-    const nextValue = rewrite ?? `${normalizedPrefix}/${unquoted}`.replace(/\/+/g, "/");
-    return value.startsWith("\"") ? `"${nextValue}"` : nextValue;
+    const nextValue = rewrite ?? `${normalizedPrefix}/${unquoted}`.replace(/\/+/g, '/');
+    return value.startsWith('"') ? `"${nextValue}"` : nextValue;
   };
 
   return patch
-    .split("\n")
+    .split('\n')
     .map((line) => {
-      if (line.startsWith("diff --git a/")) {
+      if (line.startsWith('diff --git a/')) {
         const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
         if (!match) {
           return line;
         }
         return `diff --git a/${prefixedPath(match[1])} b/${prefixedPath(match[2])}`;
       }
-      if (line.startsWith("--- a/")) {
+      if (line.startsWith('--- a/')) {
         return `--- a/${prefixedPath(line.slice(6))}`;
       }
-      if (line.startsWith("+++ b/")) {
+      if (line.startsWith('+++ b/')) {
         return `+++ b/${prefixedPath(line.slice(6))}`;
       }
-      if (line.startsWith("rename from ")) {
-        return `rename from ${prefixedPath(line.slice("rename from ".length))}`;
+      if (line.startsWith('rename from ')) {
+        return `rename from ${prefixedPath(line.slice('rename from '.length))}`;
       }
-      if (line.startsWith("rename to ")) {
-        return `rename to ${prefixedPath(line.slice("rename to ".length))}`;
+      if (line.startsWith('rename to ')) {
+        return `rename to ${prefixedPath(line.slice('rename to '.length))}`;
       }
-      if (line.startsWith("copy from ")) {
-        return `copy from ${prefixedPath(line.slice("copy from ".length))}`;
+      if (line.startsWith('copy from ')) {
+        return `copy from ${prefixedPath(line.slice('copy from '.length))}`;
       }
-      if (line.startsWith("copy to ")) {
-        return `copy to ${prefixedPath(line.slice("copy to ".length))}`;
+      if (line.startsWith('copy to ')) {
+        return `copy to ${prefixedPath(line.slice('copy to '.length))}`;
       }
       return line;
     })
-    .join("\n");
+    .join('\n');
 }
 
 function internalPullRequestTitle(publicPr) {
@@ -351,15 +408,15 @@ function internalPullRequestTitle(publicPr) {
 
 function buildBridgeMetadata(publicPr, mirrorPath) {
   return [
-    "<!-- public-pr-sync",
+    '<!-- public-pr-sync',
     `public_repo=${publicPr.base.repo.full_name}`,
     `public_pr_number=${publicPr.number}`,
     `public_pr_url=${publicPr.html_url}`,
     `public_author_login=${publicPr.user.login}`,
     `public_author_id=${publicPr.user.id}`,
     `mirror_path=${mirrorPath}`,
-    "-->",
-  ].join("\n");
+    '-->',
+  ].join('\n');
 }
 
 // GitHub PR body hard limit. Exceeding returns 422 "body is too long".
@@ -368,7 +425,7 @@ const GITHUB_PR_BODY_LIMIT = 65536;
 function buildInternalPrBody({ publicPr, branchName, mirrorPath }) {
   const rawOriginal = publicPr.body?.trim()
     ? publicPr.body.trim()
-    : "_No public PR body was provided._";
+    : '_No public PR body was provided._';
 
   const compose = (original) => `## Summary
 Mirror public PR [#${publicPr.number}](${publicPr.html_url}) from \`${publicPr.base.repo.full_name}\` into \`inkeep/agents-private\` for canonical review and merge.
@@ -402,7 +459,7 @@ ${buildBridgeMetadata(publicPr, mirrorPath)}`;
     const truncated = rawOriginal.slice(0, Math.max(budget, 0)) + footer;
     console.log(
       `Bridge: PR body exceeded GitHub's ${GITHUB_PR_BODY_LIMIT}-char limit ` +
-        `(original: ${rawOriginal.length} chars, truncated to: ${truncated.length} chars).`,
+        `(original: ${rawOriginal.length} chars, truncated to: ${truncated.length} chars).`
     );
     body = compose(truncated);
   }
@@ -410,7 +467,7 @@ ${buildBridgeMetadata(publicPr, mirrorPath)}`;
 }
 
 function buildPublicComment({ publicPr, status, details }) {
-  if (status === "synced") {
+  if (status === 'synced') {
     return `${BRIDGE_COMMENT_MARKER}
 Thanks for the contribution! A maintainer will review and merge your PR. Your commit attribution is preserved as @${publicPr.user.login}.
 
@@ -423,21 +480,21 @@ Thanks for the contribution! A maintainer will review and merge your PR. Your co
 This comment will be updated as the status changes.`;
   }
 
-  if (status === "no-op") {
+  if (status === 'no-op') {
     return `${BRIDGE_COMMENT_MARKER}
 I checked this PR, but there was no new change to sync.
 
 ${details}`;
   }
 
-  if (status === "closed") {
+  if (status === 'closed') {
     return `${BRIDGE_COMMENT_MARKER}
 This PR was closed without merging.
 
 ${details}`;
   }
 
-  if (status === "merged-upstream") {
+  if (status === 'merged-upstream') {
     return `${BRIDGE_COMMENT_MARKER}
 This PR was merged directly here. A maintainer will make sure the change is reconciled on our side.
 
@@ -466,7 +523,7 @@ async function upsertIssueComment({ token, repo, issueNumber, body }) {
   if (existing) {
     await githubRequest({
       token,
-      method: "PATCH",
+      method: 'PATCH',
       path: `/repos/${repo}/issues/comments/${existing.id}`,
       body: { body },
     });
@@ -475,7 +532,7 @@ async function upsertIssueComment({ token, repo, issueNumber, body }) {
 
   const created = await githubRequest({
     token,
-    method: "POST",
+    method: 'POST',
     path: `/repos/${repo}/issues/${issueNumber}/comments`,
     body: { body },
   });
@@ -516,17 +573,15 @@ function reconcileMonorepoPatches(repoDir, mirrorPath) {
   let changed = false;
 
   // Patch next.config.ts files under the mirror path to add outputFileTracingRoot
-  const nextConfigPaths = [
-    path.join(repoDir, mirrorPath, "agents-manage-ui", "next.config.ts"),
-  ];
+  const nextConfigPaths = [path.join(repoDir, mirrorPath, 'agents-manage-ui', 'next.config.ts')];
 
   for (const configPath of nextConfigPaths) {
     if (!existsSync(configPath)) continue;
 
-    let content = readFileSync(configPath, "utf8");
+    let content = readFileSync(configPath, 'utf8');
 
     // Skip if already has outputFileTracingRoot
-    if (content.includes("outputFileTracingRoot")) continue;
+    if (content.includes('outputFileTracingRoot')) continue;
 
     // Add outputFileTracingRoot next to the output: 'standalone' line
     if (content.includes("output: 'standalone'")) {
@@ -534,7 +589,7 @@ function reconcileMonorepoPatches(repoDir, mirrorPath) {
         "output: 'standalone'",
         "output: 'standalone',\n  outputFileTracingRoot: monorepoRoot"
       );
-      writeFileSync(configPath, content, "utf8");
+      writeFileSync(configPath, content, 'utf8');
       console.log(`Patched outputFileTracingRoot into ${configPath}`);
       changed = true;
     }
@@ -544,18 +599,18 @@ function reconcileMonorepoPatches(repoDir, mirrorPath) {
 }
 
 async function syncPublicPr() {
-  const publicToken = requireEnv("PUBLIC_TOKEN");
-  const internalToken = requireEnv("INTERNAL_TOKEN");
-  const publicRepo = requireEnv("PUBLIC_REPO");
-  const internalRepo = requireEnv("INTERNAL_REPO");
-  const internalRepoDir = requireEnv("INTERNAL_REPO_DIR");
-  const mirrorPath = requireEnv("MONOREPO_PATH_PREFIX");
-  const internalBaseRef = requireEnv("INTERNAL_BASE_REF");
-  const internalBranchPrefix = requireEnv("INTERNAL_BRANCH_PREFIX");
-  const publicPrAction = process.env.PUBLIC_PR_ACTION ?? "opened";
-  const publicPrNumber = Number.parseInt(requireEnv("PUBLIC_PR_NUMBER"), 10);
-  const pathRewrites = parseJsonEnv("PUBLIC_PR_PATH_REWRITES", {});
-  const internalOwner = internalRepo.split("/")[0];
+  const publicToken = requireEnv('PUBLIC_TOKEN');
+  const internalToken = requireEnv('INTERNAL_TOKEN');
+  const publicRepo = requireEnv('PUBLIC_REPO');
+  const internalRepo = requireEnv('INTERNAL_REPO');
+  const internalRepoDir = requireEnv('INTERNAL_REPO_DIR');
+  const mirrorPath = requireEnv('MONOREPO_PATH_PREFIX');
+  const internalBaseRef = requireEnv('INTERNAL_BASE_REF');
+  const internalBranchPrefix = requireEnv('INTERNAL_BRANCH_PREFIX');
+  const publicPrAction = process.env.PUBLIC_PR_ACTION ?? 'opened';
+  const publicPrNumber = Number.parseInt(requireEnv('PUBLIC_PR_NUMBER'), 10);
+  const pathRewrites = parseJsonEnv('PUBLIC_PR_PATH_REWRITES', {});
+  const internalOwner = internalRepo.split('/')[0];
   const branchName = getPublicPrBranchName(internalBranchPrefix, publicPrNumber);
 
   const publicPr = await githubRequest({
@@ -572,9 +627,9 @@ async function syncPublicPr() {
 
   const metadataOnlyAction =
     internalPr &&
-    (publicPrAction === "edited" ||
-      publicPrAction === "ready_for_review" ||
-      publicPrAction === "converted_to_draft");
+    (publicPrAction === 'edited' ||
+      publicPrAction === 'ready_for_review' ||
+      publicPrAction === 'converted_to_draft');
 
   let hasStagedChanges = false;
   if (!metadataOnlyAction) {
@@ -582,8 +637,8 @@ async function syncPublicPr() {
     // branch first. We need this in place before the public-PR-refs fetch so
     // any blob already on main is deduplicated; we also need it before
     // `git apply --3way` (later) regardless.
-    run("git", ["-C", internalRepoDir, "fetch", "origin", internalBaseRef, "--prune"]);
-    run("git", ["-C", internalRepoDir, "checkout", "-B", branchName, `origin/${internalBaseRef}`]);
+    run('git', ['-C', internalRepoDir, 'fetch', 'origin', internalBaseRef, '--prune']);
+    run('git', ['-C', internalRepoDir, 'checkout', '-B', branchName, `origin/${internalBaseRef}`]);
 
     // Fetch the public PR's base + head into agents-private's object store.
     // Two purposes:
@@ -600,11 +655,11 @@ async function syncPublicPr() {
     const publicRepoUrl = `https://x-access-token:${publicToken}@github.com/${publicRepo}.git`;
 
     try {
-      run("git", ["-C", internalRepoDir, "remote", "remove", sourceRemote]);
+      run('git', ['-C', internalRepoDir, 'remote', 'remove', sourceRemote]);
     } catch {
       // remote did not exist; harmless
     }
-    run("git", ["-C", internalRepoDir, "remote", "add", sourceRemote, publicRepoUrl]);
+    run('git', ['-C', internalRepoDir, 'remote', 'add', sourceRemote, publicRepoUrl]);
 
     try {
       // Initial fetch: --depth=10000 covers the long-running branches that
@@ -615,11 +670,11 @@ async function syncPublicPr() {
       let refsFetched = false;
       for (const depth of [10000, 50000]) {
         try {
-          run("git", [
-            "-C",
+          run('git', [
+            '-C',
             internalRepoDir,
-            "fetch",
-            "--no-tags",
+            'fetch',
+            '--no-tags',
             `--depth=${depth}`,
             sourceRemote,
             `+refs/pull/${publicPrNumber}/head:${sourceHeadRef}`,
@@ -630,15 +685,15 @@ async function syncPublicPr() {
         } catch (error) {
           console.log(
             `Bridge: fetch at --depth=${depth} failed: ${error.message}. ` +
-              `Retrying with deeper history if available.`,
+              `Retrying with deeper history if available.`
           );
         }
       }
       if (!refsFetched) {
         console.log(
-          "Bridge: warning: could not fetch public PR refs into agents-private at any depth. " +
+          'Bridge: warning: could not fetch public PR refs into agents-private at any depth. ' +
             "Continuing — `git apply --3way` will still succeed if the public mirror's blobs already match agents-private/main, " +
-            "but the local-git-diff fallback for oversized PRs will not be available.",
+            'but the local-git-diff fallback for oversized PRs will not be available.'
         );
       }
 
@@ -660,34 +715,34 @@ async function syncPublicPr() {
         sourceHeadRef,
         refsFetched,
       });
-      const excludedPrefixes = parseJsonEnv("BRIDGE_EXCLUDED_PATHS", []);
+      const excludedPrefixes = parseJsonEnv('BRIDGE_EXCLUDED_PATHS', []);
       const patch = filterDiffByPath(rawPatch, excludedPrefixes);
 
       if (!patch.trim()) {
         const details =
           rawPatch.trim() && excludedPrefixes.length > 0
-            ? `Every diff section matched an excluded path prefix (\`${excludedPrefixes.join("`, `")}\`), so there was nothing left to port.`
-            : "GitHub returned an empty patch, so there was nothing to port.";
+            ? `Every diff section matched an excluded path prefix (\`${excludedPrefixes.join('`, `')}\`), so there was nothing left to port.`
+            : 'GitHub returned an empty patch, so there was nothing to port.';
         await upsertIssueComment({
           token: publicToken,
           repo: publicRepo,
           issueNumber: publicPrNumber,
           body: buildPublicComment({
             publicPr,
-            status: "no-op",
+            status: 'no-op',
             details,
           }),
         });
         return;
       }
 
-      const tempDir = mkdtempSync(path.join(tmpdir(), "public-pr-bridge-"));
-      const patchFile = path.join(tempDir, "public-pr.patch");
-      writeFileSync(patchFile, prefixPatchPaths(patch, mirrorPath, pathRewrites), "utf8");
+      const tempDir = mkdtempSync(path.join(tmpdir(), 'public-pr-bridge-'));
+      const patchFile = path.join(tempDir, 'public-pr.patch');
+      writeFileSync(patchFile, prefixPatchPaths(patch, mirrorPath, pathRewrites), 'utf8');
 
       try {
         try {
-          run("git", ["-C", internalRepoDir, "apply", "--index", "--3way", patchFile]);
+          run('git', ['-C', internalRepoDir, 'apply', '--index', '--3way', patchFile]);
         } catch (error) {
           await upsertIssueComment({
             token: publicToken,
@@ -695,7 +750,7 @@ async function syncPublicPr() {
             issueNumber: publicPrNumber,
             body: buildPublicComment({
               publicPr,
-              status: "failed",
+              status: 'failed',
               details: `Patch application failed.\n\n\`\`\`\n${error.message}\n\`\`\``,
             }),
           });
@@ -703,62 +758,63 @@ async function syncPublicPr() {
         }
 
         hasStagedChanges = (() => {
-          const output = run("git", ["-C", internalRepoDir, "diff", "--cached", "--name-only"]);
+          const output = run('git', ['-C', internalRepoDir, 'diff', '--cached', '--name-only']);
           return output.length > 0;
         })();
 
         if (hasStagedChanges) {
-          run("git", ["-C", internalRepoDir, "config", "user.name", "Inkeep OSS Sync"]);
-          run("git", ["-C", internalRepoDir, "config", "user.email", "oss-sync@inkeep.com"]);
+          run('git', ['-C', internalRepoDir, 'config', 'user.name', 'Inkeep OSS Sync']);
+          run('git', ['-C', internalRepoDir, 'config', 'user.email', 'oss-sync@inkeep.com']);
 
-          let commitAuthors = [];
+          let publicCommits = [];
           try {
-            commitAuthors = await listPublicPrCommitAuthors({
+            publicCommits = await listPublicPrCommits({
               token: publicToken,
               repo: publicRepo,
               prNumber: publicPr.number,
             });
           } catch (error) {
             console.warn(
-              `Bridge: could not fetch public PR commit authors; falling back to PR opener attribution: ${error.message}`,
+              `Bridge: could not fetch public PR commit messages; using PR opener attribution only: ${error.message}`
             );
           }
-          const { trailers } = buildCommitAttribution({
-            commitAuthors,
-            fallbackAuthor: fallbackPublicAuthor(publicPr),
+          const { body } = buildCommitAttribution({
+            commitAuthors: [publicPrAuthor(publicPr)],
+            commitMessages: publicCommits,
+            publicRepo,
           });
-          run("git", [
-            "-C",
+          run('git', [
+            '-C',
             internalRepoDir,
-            "commit",
-            "-m",
+            'commit',
+            '-m',
             `chore(sync): mirror ${publicRepo}#${publicPr.number}`,
-            "-m",
-            trailers.join("\n"),
+            '-m',
+            body,
           ]);
 
           // Run monorepo reconciliation patches (e.g. outputFileTracingRoot for Next.js)
           const reconciled = reconcileMonorepoPatches(internalRepoDir, mirrorPath);
           if (reconciled) {
-            run("git", ["-C", internalRepoDir, "add", "-A"]);
-            run("git", [
-              "-C",
+            run('git', ['-C', internalRepoDir, 'add', '-A']);
+            run('git', [
+              '-C',
               internalRepoDir,
-              "commit",
-              "--author",
+              'commit',
+              '--author',
               `Inkeep OSS Sync <oss-sync@inkeep.com>`,
-              "-m",
+              '-m',
               `chore(sync): reconcile monorepo patches for ${publicRepo}#${publicPr.number}`,
             ]);
           }
 
-          run("git", [
-            "-C",
+          run('git', [
+            '-C',
             internalRepoDir,
-            "push",
-            "--force-with-lease",
-            "--set-upstream",
-            "origin",
+            'push',
+            '--force-with-lease',
+            '--set-upstream',
+            'origin',
             branchName,
           ]);
         }
@@ -769,7 +825,7 @@ async function syncPublicPr() {
       // Always tear down the bridge-public remote, even on early return or
       // throw, so subsequent runs (or a retry of the same PR) start clean.
       try {
-        run("git", ["-C", internalRepoDir, "remote", "remove", sourceRemote]);
+        run('git', ['-C', internalRepoDir, 'remote', 'remove', sourceRemote]);
       } catch {
         // best-effort
       }
@@ -789,8 +845,8 @@ async function syncPublicPr() {
         issueNumber: publicPrNumber,
         body: buildPublicComment({
           publicPr,
-          status: "no-op",
-          details: "The change already appears to be present, so there was nothing new to sync.",
+          status: 'no-op',
+          details: 'The change already appears to be present, so there was nothing new to sync.',
         }),
       });
       return;
@@ -803,7 +859,7 @@ async function syncPublicPr() {
   if (internalPr) {
     internalPr = await githubRequest({
       token: internalToken,
-      method: "PATCH",
+      method: 'PATCH',
       path: `/repos/${internalRepo}/pulls/${internalPr.number}`,
       body: { title, body },
     });
@@ -815,7 +871,7 @@ async function syncPublicPr() {
   } else {
     internalPr = await githubRequest({
       token: internalToken,
-      method: "POST",
+      method: 'POST',
       path: `/repos/${internalRepo}/pulls`,
       body: {
         title,
@@ -834,19 +890,19 @@ async function syncPublicPr() {
     body: buildPublicComment({
       publicPr,
       internalPr,
-      status: "synced",
+      status: 'synced',
     }),
   });
 }
 
 async function closeLinkedInternalPr() {
-  const publicToken = requireEnv("PUBLIC_TOKEN");
-  const internalToken = requireEnv("INTERNAL_TOKEN");
-  const publicRepo = requireEnv("PUBLIC_REPO");
-  const internalRepo = requireEnv("INTERNAL_REPO");
-  const internalBranchPrefix = requireEnv("INTERNAL_BRANCH_PREFIX");
-  const publicPrNumber = Number.parseInt(requireEnv("PUBLIC_PR_NUMBER"), 10);
-  const internalOwner = internalRepo.split("/")[0];
+  const publicToken = requireEnv('PUBLIC_TOKEN');
+  const internalToken = requireEnv('INTERNAL_TOKEN');
+  const publicRepo = requireEnv('PUBLIC_REPO');
+  const internalRepo = requireEnv('INTERNAL_REPO');
+  const internalBranchPrefix = requireEnv('INTERNAL_BRANCH_PREFIX');
+  const publicPrNumber = Number.parseInt(requireEnv('PUBLIC_PR_NUMBER'), 10);
+  const internalOwner = internalRepo.split('/')[0];
   const branchName = getPublicPrBranchName(internalBranchPrefix, publicPrNumber);
 
   const publicPr = await githubRequest({
@@ -873,8 +929,8 @@ async function closeLinkedInternalPr() {
       body: buildPublicComment({
         publicPr,
         internalPr,
-        status: "merged-upstream",
-        details: "",
+        status: 'merged-upstream',
+        details: '',
       }),
     });
     return;
@@ -882,7 +938,7 @@ async function closeLinkedInternalPr() {
 
   await githubRequest({
     token: internalToken,
-    method: "POST",
+    method: 'POST',
     path: `/repos/${internalRepo}/issues/${internalPr.number}/comments`,
     body: {
       body: `Closing because the linked public PR [#${publicPr.number}](${publicPr.html_url}) was closed without merge.`,
@@ -891,15 +947,15 @@ async function closeLinkedInternalPr() {
 
   await githubRequest({
     token: internalToken,
-    method: "PATCH",
+    method: 'PATCH',
     path: `/repos/${internalRepo}/pulls/${internalPr.number}`,
-    body: { state: "closed" },
+    body: { state: 'closed' },
   });
 
   try {
     await githubRequest({
       token: internalToken,
-      method: "DELETE",
+      method: 'DELETE',
       path: `/repos/${internalRepo}/git/refs/heads/${branchName}`,
     });
   } catch (error) {
@@ -912,20 +968,20 @@ async function closeLinkedInternalPr() {
     issueNumber: publicPrNumber,
     body: buildPublicComment({
       publicPr,
-      status: "closed",
-      details: "",
+      status: 'closed',
+      details: '',
     }),
   });
 }
 
 async function main() {
   const mode = process.argv[2];
-  if (mode === "sync") {
+  if (mode === 'sync') {
     await syncPublicPr();
     return;
   }
 
-  if (mode === "close") {
+  if (mode === 'close') {
     await closeLinkedInternalPr();
     return;
   }
@@ -944,6 +1000,6 @@ export {
   buildCommitAttribution,
   buildInternalPrBody,
   buildPublicComment,
-  listPublicPrCommitAuthors,
+  listPublicPrCommits,
   prefixPatchPaths,
 };
