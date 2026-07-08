@@ -10,6 +10,8 @@ import { pathToFileURL } from 'node:url';
 // - public/agents/.github/scripts/bridge-public-pr-to-monorepo.mjs
 // - public/open-knowledge/.github/scripts/bridge-public-pr-to-monorepo.mjs
 const BRIDGE_COMMENT_MARKER = '<!-- monorepo-pr-bridge -->';
+const OSS_SYNC_BOT_NAME = 'inkeep-oss-sync[bot]';
+const OSS_SYNC_BOT_EMAIL = '274976938+inkeep-oss-sync[bot]@users.noreply.github.com';
 
 // Strip x-access-token credentials from any string that might end up in an
 // error message, log line, or thrown exception. GitHub Actions masks repo
@@ -763,8 +765,8 @@ async function syncPublicPr() {
         })();
 
         if (hasStagedChanges) {
-          run('git', ['-C', internalRepoDir, 'config', 'user.name', 'Inkeep OSS Sync']);
-          run('git', ['-C', internalRepoDir, 'config', 'user.email', 'oss-sync@inkeep.com']);
+          run('git', ['-C', internalRepoDir, 'config', 'user.name', OSS_SYNC_BOT_NAME]);
+          run('git', ['-C', internalRepoDir, 'config', 'user.email', OSS_SYNC_BOT_EMAIL]);
 
           let publicCommits = [];
           try {
@@ -802,7 +804,7 @@ async function syncPublicPr() {
               internalRepoDir,
               'commit',
               '--author',
-              `Inkeep OSS Sync <oss-sync@inkeep.com>`,
+              `${OSS_SYNC_BOT_NAME} <${OSS_SYNC_BOT_EMAIL}>`,
               '-m',
               `chore(sync): reconcile monorepo patches for ${publicRepo}#${publicPr.number}`,
             ]);
