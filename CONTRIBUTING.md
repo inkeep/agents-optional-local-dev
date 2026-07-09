@@ -14,7 +14,7 @@ Review and merge decisions happen through the maintainer review flow so mirrored
 
 - The bridge workflow waits for Inkeep to approve its `inkeep-oss-sync` environment deployment before it runs, so the bot comment may not appear immediately.
 - **Maintainer review happens after the bridge syncs your PR.** Reviewer comments are **not auto-mirrored back to your PR**. If you don't hear back within a few business days, please comment on your PR to nudge — that's the right thing to do, not annoying.
-- **Your PR will be closed (not merged)** once the change has been accepted and synced back. Accepted changes land here with your contribution credited through co-author trailers.
+- **Your PR will be closed (not merged)** once the change has been accepted and synced back. Accepted changes land here with your authorship preserved.
 
 ## Scope
 
