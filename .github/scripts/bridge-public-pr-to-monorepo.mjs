@@ -10,17 +10,14 @@ import { pathToFileURL } from 'node:url';
 // - public/agents/.github/scripts/bridge-public-pr-to-monorepo.mjs
 // - public/open-knowledge/.github/scripts/bridge-public-pr-to-monorepo.mjs
 // - public/mermaid-wysiwyg/.github/scripts/bridge-public-pr-to-monorepo.mjs
-const BRIDGE_COMMENT_MARKER = '<!-- monorepo-pr-bridge -->';
 const OSS_SYNC_BOT_NAME = 'inkeep-oss-sync[bot]';
 const OSS_SYNC_BOT_EMAIL = '274976938+inkeep-oss-sync[bot]@users.noreply.github.com';
 
 // Strip x-access-token credentials from any string that might end up in an
 // error message, log line, or thrown exception. GitHub Actions masks repo
-// secrets in its own job log, but this script's exceptions can also surface
-// in PR comments (e.g. the failed-state path below includes `error.message`
-// in `Patch application failed`), failure-alert issues, or future error-
-// reporting integrations — none of which inherit the Actions log mask.
-// Defense-in-depth: redact at the boundary.
+// secrets in its own job log, but this script's exceptions can also surface in
+// failure-alert issues or future error-reporting integrations — none of which
+// inherit the Actions log mask. Defense-in-depth: redact at the boundary.
 function sanitizeErrorMessage(value) {
   if (typeof value !== 'string') return value;
   return value.replace(/https:\/\/x-access-token:[^@\s]+@/g, 'https://x-access-token:***@');
@@ -473,70 +470,17 @@ ${buildBridgeMetadata(publicPr, mirrorPath)}`;
   return body;
 }
 
-function buildPublicComment({ publicPr, status, details }) {
-  if (status === 'synced') {
-    return `${BRIDGE_COMMENT_MARKER}
-Thanks for the contribution! A maintainer will review and merge your PR. Your commit attribution is preserved as @${publicPr.user.login}.
+function buildWelcomePublicComment() {
+  return `Thanks for the contribution!
 
 **What happens next:**
 
 - A maintainer will review your PR.
-- If you don't hear back within a few business days, please comment here to nudge — that's the right thing to do, not annoying.
-- When your change is accepted, this PR closes automatically. Don't be alarmed when it closes — that's how it merges, and your authorship is preserved.
-
-This comment will be updated as the status changes.`;
-  }
-
-  if (status === 'no-op') {
-    return `${BRIDGE_COMMENT_MARKER}
-I checked this PR, but there was no new change to sync.
-
-${details}`;
-  }
-
-  if (status === 'closed') {
-    return `${BRIDGE_COMMENT_MARKER}
-This PR was closed without merging.
-
-${details}`;
-  }
-
-  if (status === 'merged-upstream') {
-    return `${BRIDGE_COMMENT_MARKER}
-This PR was merged directly here. A maintainer will make sure the change is reconciled on our side.
-
-${details}`;
-  }
-
-  return `${BRIDGE_COMMENT_MARKER}
-I could not sync this PR automatically. A maintainer will look into it.
-
-${details}`;
+- If you don't hear back within a few business days, please comment here to nudge our team.
+- This repository is maintained through an internal mirror. When your change is accepted, this PR will close automatically. Don't be alarmed when it closes — that's how it merges, and your authorship is preserved.`;
 }
 
-async function upsertIssueComment({ token, repo, issueNumber, body }) {
-  let existing = null;
-  let page = 1;
-  while (!existing) {
-    const comments = await githubRequest({
-      token,
-      path: `/repos/${repo}/issues/${issueNumber}/comments?per_page=100&page=${page}`,
-    });
-    if (comments.length === 0) break;
-    existing = comments.find((comment) => comment.body?.includes(BRIDGE_COMMENT_MARKER));
-    if (!existing && comments.length < 100) break;
-    page++;
-  }
-  if (existing) {
-    await githubRequest({
-      token,
-      method: 'PATCH',
-      path: `/repos/${repo}/issues/comments/${existing.id}`,
-      body: { body },
-    });
-    return existing.html_url;
-  }
-
+async function createIssueComment({ token, repo, issueNumber, body }) {
   const created = await githubRequest({
     token,
     method: 'POST',
@@ -544,6 +488,19 @@ async function upsertIssueComment({ token, repo, issueNumber, body }) {
     body: { body },
   });
   return created.html_url;
+}
+
+async function acknowledgePublicPr() {
+  const publicToken = requireEnv('PUBLIC_TOKEN');
+  const publicRepo = requireEnv('PUBLIC_REPO');
+  const publicPrNumber = Number.parseInt(requireEnv('PUBLIC_PR_NUMBER'), 10);
+
+  await createIssueComment({
+    token: publicToken,
+    repo: publicRepo,
+    issueNumber: publicPrNumber,
+    body: buildWelcomePublicComment(),
+  });
 }
 
 async function findOpenInternalPr({ token, repo, owner, branchName }) {
@@ -727,20 +684,6 @@ async function syncPublicPr() {
       const patch = filterDiffByPath(rawPatch, excludedPrefixes);
 
       if (!patch.trim()) {
-        const details =
-          rawPatch.trim() && excludedPrefixes.length > 0
-            ? `Every diff section matched an excluded path prefix (\`${excludedPrefixes.join('`, `')}\`), so there was nothing left to port.`
-            : 'GitHub returned an empty patch, so there was nothing to port.';
-        await upsertIssueComment({
-          token: publicToken,
-          repo: publicRepo,
-          issueNumber: publicPrNumber,
-          body: buildPublicComment({
-            publicPr,
-            status: 'no-op',
-            details,
-          }),
-        });
         return;
       }
 
@@ -752,16 +695,6 @@ async function syncPublicPr() {
         try {
           run('git', ['-C', internalRepoDir, 'apply', '--index', '--3way', patchFile]);
         } catch (error) {
-          await upsertIssueComment({
-            token: publicToken,
-            repo: publicRepo,
-            issueNumber: publicPrNumber,
-            body: buildPublicComment({
-              publicPr,
-              status: 'failed',
-              details: `Patch application failed.\n\n\`\`\`\n${error.message}\n\`\`\``,
-            }),
-          });
           throw error;
         }
 
@@ -847,16 +780,6 @@ async function syncPublicPr() {
     });
 
     if (!internalPr && !hasStagedChanges) {
-      await upsertIssueComment({
-        token: publicToken,
-        repo: publicRepo,
-        issueNumber: publicPrNumber,
-        body: buildPublicComment({
-          publicPr,
-          status: 'no-op',
-          details: 'The change already appears to be present, so there was nothing new to sync.',
-        }),
-      });
       return;
     }
   }
@@ -890,17 +813,6 @@ async function syncPublicPr() {
       },
     });
   }
-
-  await upsertIssueComment({
-    token: publicToken,
-    repo: publicRepo,
-    issueNumber: publicPrNumber,
-    body: buildPublicComment({
-      publicPr,
-      internalPr,
-      status: 'synced',
-    }),
-  });
 }
 
 async function closeLinkedInternalPr() {
@@ -930,17 +842,6 @@ async function closeLinkedInternalPr() {
   }
 
   if (publicPr.merged_at) {
-    await upsertIssueComment({
-      token: publicToken,
-      repo: publicRepo,
-      issueNumber: publicPrNumber,
-      body: buildPublicComment({
-        publicPr,
-        internalPr,
-        status: 'merged-upstream',
-        details: '',
-      }),
-    });
     return;
   }
 
@@ -969,21 +870,15 @@ async function closeLinkedInternalPr() {
   } catch (error) {
     console.log(`Branch cleanup skipped: ${error.message}`);
   }
-
-  await upsertIssueComment({
-    token: publicToken,
-    repo: publicRepo,
-    issueNumber: publicPrNumber,
-    body: buildPublicComment({
-      publicPr,
-      status: 'closed',
-      details: '',
-    }),
-  });
 }
 
 async function main() {
   const mode = process.argv[2];
+  if (mode === 'acknowledge') {
+    await acknowledgePublicPr();
+    return;
+  }
+
   if (mode === 'sync') {
     await syncPublicPr();
     return;
@@ -1007,7 +902,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 export {
   buildCommitAttribution,
   buildInternalPrBody,
-  buildPublicComment,
+  buildWelcomePublicComment,
   listPublicPrCommits,
   prefixPatchPaths,
 };
